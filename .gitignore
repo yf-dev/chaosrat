@@ -1,0 +1,3 @@
+.vscode
+.devcontainer.json
+docker-compose.*.yml
