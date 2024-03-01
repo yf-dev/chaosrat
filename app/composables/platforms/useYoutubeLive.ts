@@ -24,6 +24,14 @@ function handleYoutubeLiveEmojis(message: YoutubeLiveMessage) {
   };
 }
 
+function handleYoutubeLiveBadges(message: YoutubeLiveMessage) {
+  const badges: { [key: string]: string } = {};
+  if (message.chatItem.author.badge) {
+    badges["youtube-live/badge"] = message.chatItem.author.badge.thumbnail.url;
+  }
+  return badges;
+}
+
 export function useYoutubeLive(
   handle: MaybeRefOrGetter<string | null>,
   maxChatSize: MaybeRefOrGetter<number>
@@ -33,6 +41,7 @@ export function useYoutubeLive(
   const chatItems = computed(() => {
     return messages.value.map((message) => {
       const { emojis, text } = handleYoutubeLiveEmojis(message);
+      const badges = handleYoutubeLiveBadges(message);
       return {
         platform: "youtube-live",
         id: `youtube-live-${message.chatItem.id}`,
@@ -41,6 +50,7 @@ export function useYoutubeLive(
         timestamp: message.timestamp,
         extra: {
           emojis: emojis,
+          badges: badges,
         },
       } as ChatItem;
     });

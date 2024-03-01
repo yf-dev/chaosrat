@@ -6,6 +6,8 @@ ChaosRat은 [OBS Studio](https://obsproject.com/)와 같은 방송 소프트웨�
 
 - 다중 플랫폼 지원
   - 현재 [치지직(Chzzk)](https://chzzk.naver.com/), [트위치(Twitch)](https://www.twitch.tv/), [유튜브 라이브(Youtube Live)](https://www.youtube.com/live) 채팅을 지원합니다.
+- 유저 뱃지 지원
+  - 플랫폼에 따라 다른 유저 뱃지를 표시합니다.
 - 이모티콘 지원
   - 각 플랫폼별 채팅에 포함된 이모티콘을 표시합니다.
 - 스티커 지원
@@ -22,7 +24,6 @@ ChaosRat은 [OBS Studio](https://obsproject.com/)와 같은 방송 소프트웨�
 아래 기능은 아직 지원 예정이 없습니다. 추후 요청이 있을 경우 추가될 수 있습니다.
 
 - 후원 메시지 표시
-- 유저 뱃지 표시
 
 ## 사용 방법
 
@@ -40,6 +41,10 @@ ChaosRat은 [OBS Studio](https://obsproject.com/)와 같은 방송 소프트웨�
 ```bash
 docker-compose up
 ```
+
+트위치 연동을 위해서는 [Twitch Developers](https://dev.twitch.tv/)에서 애플리케이션을 등록하고 클라이언트 ID와 클라이언트 시크릿을 발급받아야 합니다.
+
+발급받은 클라이언트 ID와 클라이언트 시크릿을 `docker-compose.yml` 파일의 `NUXT_TWITCH_CLIENT_ID`와 `NUXT_TWITCH_CLIENT_SECRET`에 입력해주세요.
 
 ## License
 

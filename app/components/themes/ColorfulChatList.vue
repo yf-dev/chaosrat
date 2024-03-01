@@ -11,6 +11,14 @@
           "
         >
           <img class="icon" :src="iconUrl(chat.platform)" />
+          <div class="badge-box">
+            <img
+              v-for="(url, badgeId) in chat.extra.badges ?? {}"
+              :key="badgeId"
+              class="badge"
+              :src="url"
+            />
+          </div>
           <div class="nickname">
             {{ chat.nickname }}
           </div>
@@ -113,6 +121,18 @@ function stickerToTag(stickerUrl: string): string {
 }
 
 .icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  vertical-align: middle;
+}
+
+.badge-box {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.badge {
   width: 1.8rem;
   height: 1.8rem;
   vertical-align: middle;

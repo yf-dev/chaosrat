@@ -1,12 +1,7 @@
-import {
-  ChzzkChatChannelIdResponse,
-  ChzzkChatChannelIdError,
-} from "~/lib/interfaces";
+import { ChzzkChatChannelIdResponse, ApiError } from "~/lib/interfaces";
 
 export default defineEventHandler(
-  async (
-    event
-  ): Promise<ChzzkChatChannelIdResponse | ChzzkChatChannelIdError> => {
+  async (event): Promise<ChzzkChatChannelIdResponse | ApiError> => {
     const query = getQuery(event);
     const channelId = query.channelId;
     if (!channelId || typeof channelId !== "string") {
@@ -15,17 +10,20 @@ export default defineEventHandler(
         error: "channelId param should be a string",
       };
     }
-    const response = await fetch(
+    const response = await $fetch<{
+      content?: {
+        chatChannelId?: string;
+      };
+    }>(
       `https://api.chzzk.naver.com/polling/v2/channels/${channelId}/live-status`
     );
-    const responseJson = await response.json();
-    if (responseJson?.content?.chatChannelId === undefined) {
+    if (response?.content?.chatChannelId === undefined) {
       return {
         status: "ERROR",
         error: "No chatChannelId in response",
       };
     }
-    const chatChannelId = responseJson.content.chatChannelId;
+    const chatChannelId = response.content.chatChannelId;
     return {
       status: "OK",
       chatChannelId: chatChannelId,

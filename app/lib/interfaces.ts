@@ -1,13 +1,3 @@
-export interface ChzzkChatChannelIdResponse {
-  status: "OK";
-  chatChannelId: string;
-}
-
-export interface ChzzkChatChannelIdError {
-  status: "ERROR";
-  error: string;
-}
-
 export interface ChatExtra {
   emojis?: {
     // key: emoji id, value: emoji url
@@ -15,6 +5,10 @@ export interface ChatExtra {
   };
   stickers?: {
     // key: sticker id, value: sticker url
+    [key: string]: string;
+  };
+  badges?: {
+    // key: badge id, value: badge url
     [key: string]: string;
   };
 }
@@ -51,4 +45,24 @@ export interface DcconData {
     tags: string[];
     path: string;
   }[];
+}
+
+export interface ApiError {
+  status: "ERROR";
+  error: string;
+}
+
+export interface ChzzkChatChannelIdResponse {
+  status: "OK";
+  chatChannelId: string;
+}
+
+export interface TwitchBadge {
+  // key: badge id, value: badge url
+  [key: string]: string;
+}
+
+export interface TwitchBadgesResponse {
+  status: "OK";
+  badge: TwitchBadge;
 }

@@ -11,4 +11,9 @@ export default defineNuxtConfig({
     },
   ],
   css: ["~/assets/css/main.css"],
+  runtimeConfig: {
+    twitchClientId: "", // can be overridden by NUXT_TWITCH_CLIENT_ID environment variable
+    twitchClientSecret: "", // can be overridden by NUXT_TWITCH_CLIENT_SECRET environment variable
+    public: {},
+  },
 });

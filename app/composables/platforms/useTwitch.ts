@@ -1,6 +1,11 @@
 import { parseEmotesInMessage, getEmoteAsUrl } from "tmi-utils";
 import { Client, type ChatUserstate } from "tmi.js";
-import type { ChatItem } from "~/lib/interfaces";
+import type {
+  ChatItem,
+  TwitchBadge,
+  TwitchBadgesResponse,
+  ApiError,
+} from "~/lib/interfaces";
 
 interface TwitchMessage {
   channel: string;
@@ -20,15 +25,28 @@ function handleTwitchEmojis(message: TwitchMessage, text: string) {
   return emojis;
 }
 
+function handleTwitchBadges(message: TwitchMessage, badgeData: TwitchBadge) {
+  const badges: { [key: string]: string } = {};
+  if (message.tags.badges) {
+    for (const [badge, version] of Object.entries(message.tags.badges)) {
+      badges[`twitch/${badge}/${version}`] =
+        badgeData[`${badge}/${version}`] ?? "";
+    }
+  }
+  return badges;
+}
+
 export function useTwitch(
   channel: MaybeRefOrGetter<string | null>,
   maxChatSize: MaybeRefOrGetter<number>
 ) {
   const messages = ref<TwitchMessage[]>([]);
 
+  const badgeData = ref<TwitchBadge>({});
   const chatItems = computed(() => {
     return messages.value.map((message) => {
       const emojis = handleTwitchEmojis(message, message.message);
+      const badges = handleTwitchBadges(message, badgeData.value);
       return {
         platform: "twitch",
         id: `twitch-${message.tags.id}`,
@@ -37,6 +55,7 @@ export function useTwitch(
         timestamp: message.timestamp,
         extra: {
           emojis: emojis,
+          badges: badges,
         },
       } as ChatItem;
     });
@@ -125,6 +144,16 @@ export function useTwitch(
     });
     await newClient.connect();
     twitchChatClient.value = newClient;
+
+    const badgeResponse = await $fetch<TwitchBadgesResponse | ApiError>(
+      `/api/twitch/badges?twitchChannelId=${twitchChannel}`
+    );
+    if (badgeResponse.status === "OK") {
+      badgeData.value = badgeResponse.badge;
+      console.log("Fetched Twitch badges", badgeData.value);
+    } else {
+      console.error("Failed to fetch Twitch badges", badgeResponse.error);
+    }
   }
 
   watch(

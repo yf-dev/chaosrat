@@ -6,7 +6,23 @@
           <div class="icon-box">
             <img class="icon" :src="iconUrl(chat.platform)" />
           </div>
-          <IconChevronDown color="#999999" :size="20" :strokeWidth="1" />
+          <IconChevronDown
+            class="chevron"
+            color="#999999"
+            :size="20"
+            :strokeWidth="1"
+          />
+          <div
+            v-if="Object.keys(chat.extra.badges ?? {}).length > 0"
+            class="badge-box"
+          >
+            <img
+              v-for="(url, badgeId) in chat.extra.badges ?? {}"
+              :key="badgeId"
+              class="badge"
+              :src="url"
+            />
+          </div>
           <div class="nickname">
             {{ chat.nickname }}
           </div>
@@ -62,6 +78,7 @@ function stickerToTag(stickerUrl: string): string {
   position: relative;
   height: 100vh;
   width: 100vw;
+  background-color: rgb(29, 29, 29);
 }
 .list {
   position: absolute;
@@ -71,7 +88,6 @@ function stickerToTag(stickerUrl: string): string {
 }
 .item {
   position: relative;
-  background-color: rgb(29, 29, 29);
   color: rgb(136, 136, 136);
   border-top: 1px solid rgb(51, 51, 51);
 }
@@ -93,6 +109,26 @@ function stickerToTag(stickerUrl: string): string {
 }
 
 .icon-box .icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  vertical-align: middle;
+}
+
+.chevron {
+  width: 2rem;
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+
+.badge-box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+
+.badge {
   width: 1.8rem;
   height: 1.8rem;
   vertical-align: middle;

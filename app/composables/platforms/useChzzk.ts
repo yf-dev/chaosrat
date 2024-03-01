@@ -2,7 +2,7 @@ import { useTimeoutPoll } from "@vueuse/core";
 import { ChzzkChat, type ChatEvent } from "chzzk";
 import type {
   ChzzkChatChannelIdResponse,
-  ChzzkChatChannelIdError,
+  ApiError,
   ChatItem,
 } from "~/lib/interfaces";
 
@@ -23,6 +23,31 @@ function handleChzzkEmojis(message: ChzzkMessage) {
   return emojis;
 }
 
+function handleChzzkBadges(message: ChzzkMessage) {
+  const badges: { [key: string]: string } = {};
+  if (message.chatEvent.profile.badge) {
+    badges["chzzk/badge"] = message.chatEvent.profile.badge.imageUrl;
+  }
+  if (message.chatEvent.profile.activityBadges) {
+    for (const badge of message.chatEvent.profile.activityBadges) {
+      badges[`chzzk/${badge.badgeId}`] = badge.imageUrl;
+    }
+  }
+  if ("subscription" in message.chatEvent.profile.streamingProperty) {
+    // subscription badge is not supported in chzzk library yet
+    const subscription: {
+      accumulativeMonth: number;
+      badge: {
+        imageUrl: string;
+      };
+      tier: number;
+    } = message.chatEvent.profile.streamingProperty.subscription as any;
+    badges[`chzzk/subscription/${subscription.accumulativeMonth}`] =
+      subscription.badge.imageUrl;
+  }
+  return badges;
+}
+
 export function useChzzk(
   channelId: MaybeRefOrGetter<string | null>,
   maxChatSize: MaybeRefOrGetter<number>
@@ -34,6 +59,7 @@ export function useChzzk(
       .filter((message) => !message.chatEvent.hidden)
       .map((message) => {
         const emojis = handleChzzkEmojis(message);
+        const badges = handleChzzkBadges(message);
         return {
           platform: "chzzk",
           id: `chzzk-${message.chatEvent.time}`,
@@ -42,6 +68,7 @@ export function useChzzk(
           timestamp: message.timestamp,
           extra: {
             emojis: emojis,
+            badges: badges,
           },
         } as ChatItem;
       });
@@ -52,12 +79,13 @@ export function useChzzk(
     if (!toValue(channelId)) {
       return;
     }
-    const data = await $fetch<
-      ChzzkChatChannelIdResponse | ChzzkChatChannelIdError
-    >("/api/chzzk/chatChannelId", {
-      query: { channelId: toValue(channelId) },
-      timeout: 1000,
-    });
+    const data = await $fetch<ChzzkChatChannelIdResponse | ApiError>(
+      "/api/chzzk/chatChannelId",
+      {
+        query: { channelId: toValue(channelId) },
+        timeout: 1000,
+      }
+    );
     if (data.status === "ERROR") {
       console.log(`Chzzk getCcid Error: ${data.error}`);
       return;

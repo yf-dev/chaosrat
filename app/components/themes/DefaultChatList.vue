@@ -4,6 +4,14 @@
       <div v-for="chat in chatItems" :key="chat.id" class="item">
         <div class="nickname-box">
           <img class="icon" :src="iconUrl(chat.platform)" />
+          <div class="badge-box">
+            <img
+              v-for="(url, badgeId) in chat.extra.badges ?? {}"
+              :key="badgeId"
+              class="badge"
+              :src="url"
+            />
+          </div>
           <div class="nickname">
             <TextWithShadow
               :shadowSize="0.1"
@@ -83,6 +91,18 @@ function stickerToTag(stickerUrl: string): string {
 }
 
 .icon {
+  width: 1.8rem;
+  height: 1.8rem;
+  vertical-align: middle;
+}
+
+.badge-box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.badge {
   width: 1.8rem;
   height: 1.8rem;
   vertical-align: middle;

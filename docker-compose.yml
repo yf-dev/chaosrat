@@ -5,6 +5,8 @@ services:
       context: .
       args:
         - NODE_ENV=dev
+        - NUXT_TWITCH_CLIENT_ID=your-twitch-client-id
+        - NUXT_TWITCH_CLIENT_SECRET=your-twitch-client-secret
     restart: unless-stopped
     ports:
       - "3000:3000"
