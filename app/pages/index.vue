@@ -107,6 +107,40 @@
       </div>
       <div class="row">
         <div class="col-2">
+          <label for="hiddenUsernameRegex">숨길 유저명</label>
+        </div>
+        <div class="col">
+          <input
+            type="text"
+            class="form-control"
+            id="hiddenUsernameRegex"
+            @input="
+              hiddenUsernameRegex = ($event.target as HTMLInputElement).value
+            "
+            :value="hiddenUsernameRegex"
+          />
+          <p>정규표현식(RegExp)으로 입력하세요.</p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-2">
+          <label for="hiddenMessageRegex">숨길 메시지</label>
+        </div>
+        <div class="col">
+          <input
+            type="text"
+            class="form-control"
+            id="hiddenMessageRegex"
+            @input="
+              hiddenMessageRegex = ($event.target as HTMLInputElement).value
+            "
+            :value="hiddenMessageRegex"
+          />
+          <p>정규표현식(RegExp)으로 입력하세요.</p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-2">
           <label>기타 옵션</label>
         </div>
         <div class="col">
@@ -170,6 +204,7 @@
 <script setup lang="ts">
 import { useClipboard } from "@vueuse/core";
 import type { ChatTheme } from "~/lib/interfaces";
+import { encodeUrlSafeBase64 } from "~/lib/utils";
 
 useHead({
   title: "ChaosRat - 채팅 오버레이 URL 생성",
@@ -194,6 +229,8 @@ const twitchChannel = ref<string>("");
 const youtubeHandle = ref<string>("");
 const theme = ref<ChatTheme>("default");
 const maxChatSize = ref<number>(100);
+const hiddenUsernameRegex = ref<string>("");
+const hiddenMessageRegex = ref<string>("");
 const isUseOpenDcconSelector = ref<boolean>(false);
 
 const chatOverlayUrl = computed(() => {
@@ -204,6 +241,14 @@ const chatOverlayUrl = computed(() => {
   url.searchParams.set("youtubeHandle", youtubeHandle.value);
   url.searchParams.set("theme", theme.value);
   url.searchParams.set("maxChatSize", maxChatSize.value.toString());
+  url.searchParams.set(
+    "hiddenUsernameRegex",
+    encodeUrlSafeBase64(hiddenUsernameRegex.value)
+  );
+  url.searchParams.set(
+    "hiddenMessageRegex",
+    encodeUrlSafeBase64(hiddenMessageRegex.value)
+  );
   if (isUseOpenDcconSelector.value) {
     url.searchParams.set("isUseOpenDcconSelector", "true");
   }

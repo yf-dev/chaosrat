@@ -3,16 +3,22 @@
 </template>
 
 <script setup lang="ts">
-import { DefaultChatList, ColorfulChatList, VideoMasterChatList } from "#components";
+import {
+  DefaultChatList,
+  ColorfulChatList,
+  VideoMasterChatList,
+} from "#components";
 import { encodeFormatString } from "~/lib/utils";
 import type { ChatItem } from "~/lib/interfaces";
 
 const props = defineProps<{
-  theme: string | null;
-  maxChatSize: number | null;
   chzzkChannelId: string | null;
   twitchChannel: string | null;
   youtubeHandle: string | null;
+  theme: string | null;
+  maxChatSize: number | null;
+  hiddenUsernameRegex: string | null;
+  hiddenMessageRegex: string | null;
   isUseOpenDcconSelector: boolean | null;
 }>();
 const chatListComponent = computed(() => {
@@ -34,6 +40,20 @@ const maxChatSize = computed(() => {
   return props.maxChatSize;
 });
 
+const hiddenUsernameRegex = computed(() => {
+  if (props.hiddenUsernameRegex === null) {
+    return null;
+  }
+  return new RegExp(props.hiddenUsernameRegex);
+});
+
+const hiddenMessageRegex = computed(() => {
+  if (props.hiddenMessageRegex === null) {
+    return null;
+  }
+  return new RegExp(props.hiddenMessageRegex);
+});
+
 const { chatItems: chzzkChatItems } = useChzzk(
   props.chzzkChannelId,
   maxChatSize
@@ -53,6 +73,20 @@ const { stickerItems } = useOpenDcconSelector(
   props.isUseOpenDcconSelector ? props.twitchChannel : null
 );
 
+function filterChatItems(chat: ChatItem): boolean {
+  if (hiddenUsernameRegex.value) {
+    if (hiddenUsernameRegex.value.test(chat.nickname)) {
+      return false;
+    }
+  }
+  if (hiddenMessageRegex.value) {
+    if (hiddenMessageRegex.value.test(chat.message)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function handleStickers(chat: ChatItem) {
   const stickers: { [key: string]: string } = {};
   for (const stickerItem of stickerItems.value) {
@@ -70,6 +104,7 @@ const sortedChatItems = computed(() => {
     ...youtubeLiveChatItems.value,
   ]
     .sort((a, b) => a.timestamp - b.timestamp)
+    .filter(filterChatItems)
     .slice(-maxChatSize.value)
     .map((chat) => {
       const stickers = handleStickers(chat);

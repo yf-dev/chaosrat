@@ -1,5 +1,9 @@
 import sanitizeHtml from "sanitize-html";
 import type { ChatItem } from "./interfaces";
+import {
+  encodeURI as base64EncodeURI,
+  decode as base64DecodeURI,
+} from "js-base64";
 
 /**
  * Escape curly braces and backslashes
@@ -126,4 +130,12 @@ export function hashCode(str: string): number {
     hash |= 0; // Convert to 32bit integer
   }
   return hash;
+}
+
+export function encodeUrlSafeBase64(str: string): string {
+  return base64EncodeURI(str);
+}
+
+export function decodeUrlSafeBase64(str: string): string {
+  return base64DecodeURI(str);
 }

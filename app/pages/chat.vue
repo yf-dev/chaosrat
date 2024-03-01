@@ -6,12 +6,16 @@
       :youtubeHandle="youtubeHandle"
       :theme="theme"
       :maxChatSize="maxChatSize"
+      :hiddenUsernameRegex="hiddenUsernameRegex"
+      :hiddenMessageRegex="hiddenMessageRegex"
       :isUseOpenDcconSelector="isUseOpenDcconSelector"
     ></ChatOverlay>
   </ClientOnly>
 </template>
 
 <script setup lang="ts">
+import { decodeUrlSafeBase64 } from "~/lib/utils";
+
 useHead({
   title: "ChaosRat - 채팅 오버레이",
   bodyAttrs: {
@@ -59,6 +63,32 @@ const maxChatSize = computed(() => {
     return null;
   }
   return Number.parseInt(route.query.maxChatSize, 10);
+});
+
+const hiddenUsernameRegex = computed(() => {
+  if (Array.isArray(route.query.hiddenUsernameRegex)) {
+    if (!route.query.hiddenUsernameRegex[0]) {
+      return null;
+    }
+    return decodeUrlSafeBase64(route.query.hiddenUsernameRegex[0]);
+  }
+  if (!route.query.hiddenUsernameRegex) {
+    return null;
+  }
+  return decodeUrlSafeBase64(route.query.hiddenUsernameRegex);
+});
+
+const hiddenMessageRegex = computed(() => {
+  if (Array.isArray(route.query.hiddenMessageRegex)) {
+    if (!route.query.hiddenMessageRegex[0]) {
+      return null;
+    }
+    return decodeUrlSafeBase64(route.query.hiddenMessageRegex[0]);
+  }
+  if (!route.query.hiddenMessageRegex) {
+    return null;
+  }
+  return decodeUrlSafeBase64(route.query.hiddenMessageRegex);
 });
 
 const isUseOpenDcconSelector = computed(() => {
