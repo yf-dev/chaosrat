@@ -4,7 +4,10 @@
       <div v-for="chat in chatItems" :key="chat.id" class="item">
         <div class="nickname-box">
           <img class="icon" :src="iconUrl(chat.platform)" />
-          <div class="badge-box">
+          <div
+            v-if="Object.keys(chat.extra.badges ?? {}).length > 0"
+            class="badge-box"
+          >
             <img
               v-for="(url, badgeId) in chat.extra.badges ?? {}"
               :key="badgeId"
