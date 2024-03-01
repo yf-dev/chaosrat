@@ -3,7 +3,7 @@
 </template>
 
 <script setup lang="ts">
-import { DefaultChatList, ColorfulChatList } from "#components";
+import { DefaultChatList, ColorfulChatList, VideoMasterChatList } from "#components";
 import { encodeFormatString } from "~/lib/utils";
 import type { ChatItem } from "~/lib/interfaces";
 
@@ -19,6 +19,8 @@ const chatListComponent = computed(() => {
   switch (props.theme) {
     case "colorful":
       return ColorfulChatList;
+    case "video-master":
+      return VideoMasterChatList;
     case "default":
     default:
       return DefaultChatList;

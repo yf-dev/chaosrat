@@ -10,6 +10,7 @@
     "postinstall": "nuxt prepare"
   },
   "dependencies": {
+    "@tabler/icons-vue": "^2.47.0",
     "@vueuse/core": "^10.8.0",
     "chota": "^0.9.2",
     "chzzk": "^1.4.2",

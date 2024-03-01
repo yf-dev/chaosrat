@@ -184,6 +184,7 @@ const themeOptions: {
 }[] = [
   { value: "default", label: "기본" },
   { value: "colorful", label: "컬러풀" },
+  { value: "video-master", label: "비디오마스터" },
 ];
 
 const requestUrl = useRequestURL();
