@@ -8,6 +8,8 @@
       :maxChatSize="maxChatSize"
       :hiddenUsernameRegex="hiddenUsernameRegex"
       :hiddenMessageRegex="hiddenMessageRegex"
+      :soundEffectType="soundEffectType"
+      :soundEffectVolume="soundEffectVolume"
       :isUseOpenDcconSelector="isUseOpenDcconSelector"
     ></ChatOverlay>
   </ClientOnly>
@@ -89,6 +91,26 @@ const hiddenMessageRegex = computed(() => {
     return null;
   }
   return decodeUrlSafeBase64(route.query.hiddenMessageRegex);
+});
+
+const soundEffectType = computed(() => {
+  if (Array.isArray(route.query.soundEffectType)) {
+    return route.query.soundEffectType[0];
+  }
+  return route.query.soundEffectType;
+});
+
+const soundEffectVolume = computed(() => {
+  if (Array.isArray(route.query.soundEffectVolume)) {
+    if (route.query.soundEffectVolume[0] === null) {
+      return null;
+    }
+    return Number.parseInt(route.query.soundEffectVolume[0], 10);
+  }
+  if (route.query.soundEffectVolume === null) {
+    return null;
+  }
+  return Number.parseInt(route.query.soundEffectVolume, 10);
 });
 
 const isUseOpenDcconSelector = computed(() => {

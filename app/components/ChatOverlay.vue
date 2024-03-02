@@ -11,7 +11,7 @@ import {
   PureChatList,
 } from "#components";
 import { encodeFormatString } from "~/lib/utils";
-import type { ChatItem } from "~/lib/interfaces";
+import type { ChatItem, SoundEffectType } from "~/lib/interfaces";
 
 const props = defineProps<{
   chzzkChannelId: string | null;
@@ -21,8 +21,13 @@ const props = defineProps<{
   maxChatSize: number | null;
   hiddenUsernameRegex: string | null;
   hiddenMessageRegex: string | null;
+  soundEffectType: string | null;
+  soundEffectVolume: number | null;
   isUseOpenDcconSelector: boolean | null;
 }>();
+
+const latestChatTimestamp = ref<number>(0);
+
 const chatListComponent = computed(() => {
   switch (props.theme) {
     case "colorful":
@@ -157,4 +162,33 @@ const sortedChatItems = computed(() => {
       };
     });
 });
+
+function playSoundEffect() {
+  let soundEffect: SoundEffectType = "none";
+  if (props.soundEffectType === "default") {
+    soundEffect = "default";
+  }
+  if (soundEffect === "none") {
+    return;
+  }
+  const audio = new Audio(`/sound-effects/${props.soundEffectType}.mp3`);
+  audio.volume =
+    props.soundEffectVolume === null ? 1.0 : props.soundEffectVolume / 100;
+  audio.play();
+}
+
+watch(
+  () => sortedChatItems.value,
+  (items) => {
+    if (items.length === 0) {
+      return;
+    }
+    const lastItem = items[items.length - 1];
+    if (lastItem.timestamp > latestChatTimestamp.value) {
+      latestChatTimestamp.value = lastItem.timestamp;
+      playSoundEffect();
+    }
+  },
+  { immediate: true }
+);
 </script>

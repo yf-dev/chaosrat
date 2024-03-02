@@ -20,6 +20,7 @@ export type ChatTheme =
   | "video-master"
   | "simple"
   | "pure";
+export type SoundEffectType = "none" | "default";
 
 export interface ChatItem {
   platform: ChatPlatform;

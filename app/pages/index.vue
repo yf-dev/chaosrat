@@ -141,6 +141,56 @@
       </div>
       <div class="row">
         <div class="col-2">
+          <label for="soundEffectType">효과음 종류</label>
+        </div>
+        <div class="col">
+          <select
+            class="form-control"
+            id="soundEffectType"
+            @change="
+              soundEffectType = ($event.target as HTMLSelectElement)
+                .value as SoundEffectType
+            "
+            :value="soundEffectType"
+          >
+            <option
+              v-for="option in soundEffectTypeOptions"
+              :key="option.value"
+              :value="option.value"
+            >
+              {{ option.label }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-2">
+          <label for="soundEffectVolume">효과음 볼륨</label>
+        </div>
+        <div class="col">
+          <input
+            type="range"
+            min="0"
+            max="100"
+            class="form-control"
+            id="soundEffectVolume"
+            @input="
+              soundEffectVolume = Number.parseInt(
+                ($event.target as HTMLInputElement).value,
+                10
+              )
+            "
+            :value="soundEffectVolume"
+          />
+        </div>
+        <div class="col-1">
+          <div class="range-value">
+            {{ soundEffectVolume }}
+          </div>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-2">
           <label>기타 옵션</label>
         </div>
         <div class="col">
@@ -203,7 +253,7 @@
 
 <script setup lang="ts">
 import { useClipboard } from "@vueuse/core";
-import type { ChatTheme } from "~/lib/interfaces";
+import type { ChatTheme, SoundEffectType } from "~/lib/interfaces";
 import { encodeUrlSafeBase64 } from "~/lib/utils";
 
 useHead({
@@ -223,6 +273,13 @@ const themeOptions: {
   { value: "colorful", label: "컬러풀" },
   { value: "video-master", label: "비디오마스터" },
 ];
+const soundEffectTypeOptions: {
+  value: SoundEffectType;
+  label: string;
+}[] = [
+  { value: "none", label: "없음" },
+  { value: "default", label: "기본" },
+];
 
 const requestUrl = useRequestURL();
 
@@ -233,6 +290,8 @@ const theme = ref<ChatTheme>("default");
 const maxChatSize = ref<number>(100);
 const hiddenUsernameRegex = ref<string>("");
 const hiddenMessageRegex = ref<string>("");
+const soundEffectType = ref<SoundEffectType>("none");
+const soundEffectVolume = ref<number>(100);
 const isUseOpenDcconSelector = ref<boolean>(false);
 
 const chatOverlayUrl = computed(() => {
@@ -251,6 +310,8 @@ const chatOverlayUrl = computed(() => {
     "hiddenMessageRegex",
     encodeUrlSafeBase64(hiddenMessageRegex.value)
   );
+  url.searchParams.set("soundEffectType", soundEffectType.value);
+  url.searchParams.set("soundEffectVolume", soundEffectVolume.value.toString());
   if (isUseOpenDcconSelector.value) {
     url.searchParams.set("isUseOpenDcconSelector", "true");
   }

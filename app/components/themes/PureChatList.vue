@@ -26,19 +26,6 @@ defineProps<{
   chatItems: ChatItem[];
 }>();
 
-function iconUrl(platform: ChatPlatform): string {
-  switch (platform) {
-    case "chzzk":
-      return "/chzzk.png";
-    case "twitch":
-      return "/twitch.png";
-    case "youtube-live":
-      return "/youtube.png";
-    default:
-      return "";
-  }
-}
-
 function emojiToTag(emojiUrl: string): string {
   return `<img class="emoji" src="${emojiUrl}" />`;
 }
