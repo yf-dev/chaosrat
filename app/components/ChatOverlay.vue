@@ -7,6 +7,8 @@ import {
   DefaultChatList,
   ColorfulChatList,
   VideoMasterChatList,
+  SimpleChatList,
+  PureChatList,
 } from "#components";
 import { encodeFormatString } from "~/lib/utils";
 import type { ChatItem } from "~/lib/interfaces";
@@ -27,6 +29,10 @@ const chatListComponent = computed(() => {
       return ColorfulChatList;
     case "video-master":
       return VideoMasterChatList;
+    case "simple":
+      return SimpleChatList;
+    case "pure":
+      return PureChatList;
     case "default":
     default:
       return DefaultChatList;

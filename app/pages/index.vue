@@ -218,6 +218,8 @@ const themeOptions: {
   label: string;
 }[] = [
   { value: "default", label: "기본" },
+  { value: "simple", label: "심플" },
+  { value: "pure", label: "퓨어" },
   { value: "colorful", label: "컬러풀" },
   { value: "video-master", label: "비디오마스터" },
 ];

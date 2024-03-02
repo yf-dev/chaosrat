@@ -139,3 +139,11 @@ export function encodeUrlSafeBase64(str: string): string {
 export function decodeUrlSafeBase64(str: string): string {
   return base64DecodeURI(str);
 }
+
+export function hashToColor(
+  num: number,
+  saturation: number = 100,
+  lightness: number = 50
+): string {
+  return `hsl(${(num % 360).toString()}, ${saturation}%, ${lightness}%)`;
+}

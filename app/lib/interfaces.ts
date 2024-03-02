@@ -14,7 +14,12 @@ export interface ChatExtra {
 }
 
 export type ChatPlatform = "chzzk" | "twitch" | "youtube-live";
-export type ChatTheme = "default" | "colorful" | "video-master";
+export type ChatTheme =
+  | "default"
+  | "colorful"
+  | "video-master"
+  | "simple"
+  | "pure";
 
 export interface ChatItem {
   platform: ChatPlatform;
