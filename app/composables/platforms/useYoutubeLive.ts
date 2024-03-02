@@ -60,6 +60,7 @@ export function useYoutubeLive(
   async function initChat() {
     // remove previous live video
     if (youtubeLiveChatClient.value) {
+      youtubeLiveChatClient.value.removeAllListeners();
       youtubeLiveChatClient.value.stop();
       youtubeLiveChatClient.value = null;
     }

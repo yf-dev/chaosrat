@@ -76,30 +76,38 @@ export function useChzzk(
 
   const chatChannelId = ref<string | null>(null);
   async function updateCcid() {
-    if (!toValue(channelId)) {
-      return;
-    }
-    const data = await $fetch<ChzzkChatChannelIdResponse | ApiError>(
-      "/api/chzzk/chatChannelId",
-      {
-        query: { channelId: toValue(channelId) },
-        timeout: 1000,
+    try {
+      if (!toValue(channelId)) {
+        return;
       }
-    );
-    if (data.status === "ERROR") {
-      console.log(`Chzzk getCcid Error: ${data.error}`);
-      return;
-    }
-    if (data.status === "OK") {
-      chatChannelId.value = data.chatChannelId;
+      const data = await $fetch<ChzzkChatChannelIdResponse | ApiError>(
+        "/api/chzzk/chatChannelId",
+        {
+          query: { channelId: toValue(channelId) },
+          timeout: 1000,
+        }
+      );
+      if (data.status === "ERROR") {
+        console.log(`Chzzk getCcid Error: ${data.error}`);
+        return;
+      }
+      if (data.status === "OK" && chatChannelId.value !== data.chatChannelId) {
+        chatChannelId.value = data.chatChannelId;
+      }
+    } catch (e) {
+      console.log("Chzzk getCcid Error");
+      console.error(e);
     }
   }
-  useTimeoutPoll(updateCcid, 15000, { immediate: true });
+  useTimeoutPoll(updateCcid, 5000, { immediate: true });
 
   const chzzkChatClient = ref<ChzzkChat | null>(null);
+  const isFirstConnect = ref<boolean>(true);
   async function initChat() {
     // remove previous chat client
     if (chzzkChatClient.value && chzzkChatClient.value.connected) {
+      // @ts-ignore: Overwrite the handlers
+      chzzkChatClient.value.handlers = [];
       chzzkChatClient.value.disconnect();
       chzzkChatClient.value = null;
     }
@@ -123,7 +131,10 @@ export function useChzzk(
       console.log(
         `Connected to Chzzk ${chzzkChannelId}, ${chatChannelId.value}`
       );
-      newClient.requestRecentChat(toValue(maxChatSize));
+      if (isFirstConnect.value) {
+        newClient.requestRecentChat(toValue(maxChatSize));
+        isFirstConnect.value = false;
+      }
     });
 
     newClient.on("disconnect", (innerChatChannelId) => {

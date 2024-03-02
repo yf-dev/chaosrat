@@ -69,6 +69,7 @@ export function useTwitch(
       twitchChatClient.value &&
       twitchChatClient.value.readyState() === "OPEN"
     ) {
+      twitchChatClient.value.removeAllListeners();
       await twitchChatClient.value.disconnect();
       twitchChatClient.value = null;
     }
