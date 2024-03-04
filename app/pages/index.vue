@@ -287,7 +287,7 @@ const themeOptions: {
   { value: "simple", label: "심플" },
   { value: "pure", label: "퓨어" },
   { value: "colorful", label: "컬러풀" },
-  { value: "video-master", label: "비디오마스터" },
+  { value: "video-master", label: "비디오 마스터" },
 ];
 const soundEffectTypeOptions: {
   value: SoundEffectType;
