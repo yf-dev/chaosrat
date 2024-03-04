@@ -7,6 +7,18 @@ interface YoutubeLiveMessage {
   timestamp: number;
 }
 
+function youtubeLiveChatText(item: YoutubeChatItem) {
+  let text = "";
+  for (const messageItem of item.message) {
+    if ("text" in messageItem) {
+      text += messageItem.text;
+    } else if ("emojiText" in messageItem) {
+      text += `${messageItem.alt}`;
+    }
+  }
+  return text;
+}
+
 function handleYoutubeLiveEmojis(message: YoutubeLiveMessage) {
   const emojis: { [key: string]: string } = {};
   let text = "";
@@ -32,10 +44,16 @@ function handleYoutubeLiveBadges(message: YoutubeLiveMessage) {
   return badges;
 }
 
-export function useYoutubeLive(
-  handle: MaybeRefOrGetter<string | null>,
-  maxChatSize: MaybeRefOrGetter<number>
-) {
+export function useYoutubeLive(options: {
+  /**
+   * Callback when a broadcaster message is received
+   * @param message The message received
+   * @returns true if the message is handled, false otherwise
+   */
+  onBroadcasterMessage?: (message: string) => boolean;
+}) {
+  const chatOptionsStore = useChatOptionsStore();
+  const { chatOptions } = storeToRefs(chatOptionsStore);
   const messages = ref<YoutubeLiveMessage[]>([]);
 
   const chatItems = computed(() => {
@@ -65,7 +83,7 @@ export function useYoutubeLive(
       youtubeLiveChatClient.value = null;
     }
 
-    const handleValue = toValue(handle);
+    const handleValue = chatOptions.value.youtubeHandle;
     if (!handleValue) {
       return;
     }
@@ -89,14 +107,23 @@ export function useYoutubeLive(
     liveChat.on("chat", (chatItem) => {
       console.log("Youtube Live chat");
       console.log(chatItem);
+      if (options.onBroadcasterMessage) {
+        if (chatItem.isOwner) {
+          if (options.onBroadcasterMessage(youtubeLiveChatText(chatItem))) {
+            return;
+          }
+        }
+      }
       messages.value.push({
         chatItem: chatItem,
         timestamp: new Date().getTime(),
       });
-      if (messages.value.length > toValue(maxChatSize)) {
-        messages.value = messages.value.slice(
-          messages.value.length - toValue(maxChatSize)
-        );
+      if (chatOptions.value.maxChatSize !== undefined) {
+        if (messages.value.length > chatOptions.value.maxChatSize) {
+          messages.value = messages.value.slice(
+            messages.value.length - chatOptions.value.maxChatSize
+          );
+        }
       }
     });
 
@@ -117,8 +144,7 @@ export function useYoutubeLive(
 
   watch(
     () => ({
-      handle: toValue(handle),
-      maxChatSize: toValue(maxChatSize),
+      chatOptions: chatOptions.value,
     }),
     async (val) => {
       await initChat();
@@ -133,8 +159,13 @@ export function useYoutubeLive(
     }
   });
 
+  function clearChat() {
+    messages.value = [];
+  }
+
   return {
     chatItems,
+    clearChat,
   };
 }
 

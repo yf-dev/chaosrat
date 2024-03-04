@@ -1,5 +1,5 @@
 import sanitizeHtml from "sanitize-html";
-import type { ChatItem } from "./interfaces";
+import type { ChatItem, ChatPlatform } from "./interfaces";
 import {
   encodeURI as base64EncodeURI,
   decode as base64DecodeURI,
@@ -94,10 +94,18 @@ export function encodeFormatString(
   };
 }
 
+function emojiToTag(emojiUrl: string): string {
+  return `<img class="emoji" src="${emojiUrl}" />`;
+}
+
+function stickerToTag(stickerUrl: string): string {
+  return `<img class="sticker" src="${stickerUrl}" />`;
+}
+
 export function messageHtml(
   chat: ChatItem,
-  emojiToTag: (emojiUrl: string) => string,
-  stickerToTag: (stickerUrl: string) => string
+  emojiToTagFn: (emojiUrl: string) => string = emojiToTag,
+  stickerToTagFn: (stickerUrl: string) => string = stickerToTag
 ): string {
   // console.log(chat);
   let message = sanitizeHtml(chat.message);
@@ -105,7 +113,10 @@ export function messageHtml(
   // replace emojis
   if (chat.extra.emojis) {
     for (const emoji in chat.extra.emojis) {
-      message = message.replaceAll(emoji, emojiToTag(chat.extra.emojis[emoji]));
+      message = message.replaceAll(
+        emoji,
+        emojiToTagFn(chat.extra.emojis[emoji])
+      );
     }
   }
 
@@ -114,7 +125,7 @@ export function messageHtml(
     for (const sticker in chat.extra.stickers) {
       message = message.replaceAll(
         sticker,
-        stickerToTag(chat.extra.stickers[sticker])
+        stickerToTagFn(chat.extra.stickers[sticker])
       );
     }
   }
@@ -146,4 +157,17 @@ export function hashToColor(
   lightness: number = 50
 ): string {
   return `hsl(${(num % 360).toString()}, ${saturation}%, ${lightness}%)`;
+}
+
+export function iconUrl(platform: ChatPlatform): string {
+  switch (platform) {
+    case "chzzk":
+      return "/chzzk.png";
+    case "twitch":
+      return "/twitch.png";
+    case "youtube-live":
+      return "/youtube.png";
+    default:
+      return "";
+  }
 }

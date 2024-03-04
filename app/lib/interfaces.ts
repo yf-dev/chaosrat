@@ -22,6 +22,19 @@ export type ChatTheme =
   | "pure";
 export type SoundEffectType = "none" | "default";
 
+export interface ChatOptions {
+  chzzkChannelId?: string;
+  twitchChannel?: string;
+  youtubeHandle?: string;
+  theme?: ChatTheme;
+  maxChatSize?: number;
+  hiddenUsernameRegex?: string;
+  hiddenMessageRegex?: string;
+  soundEffectType?: SoundEffectType;
+  soundEffectVolume?: number;
+  isUseOpenDcconSelector?: boolean;
+}
+
 export interface ChatItem {
   platform: ChatPlatform;
   id: string;

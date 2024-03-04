@@ -1,23 +1,27 @@
 import type { DcconError, DcconResponse } from "~/lib/interfaces";
 
-export function useOpenDcconSelector(
-  channelName: MaybeRefOrGetter<string | null>
-) {
+export function useOpenDcconSelector() {
+  const chatOptionsStore = useChatOptionsStore();
+  const { chatOptions } = storeToRefs(chatOptionsStore);
+
   const dcconUrl = ref<string | null>(null);
   const { stickerItems } = useDccon(dcconUrl);
 
   watch(
     () => ({
-      channelName: toValue(channelName),
+      chatOptions: chatOptions.value,
     }),
     async (val) => {
-      if (!val.channelName) {
+      if (
+        !chatOptions.value.isUseOpenDcconSelector ||
+        !chatOptions.value.twitchChannel
+      ) {
         return;
       }
       const dcconResult = await $fetch<DcconResponse | DcconError>(
         "https://open-dccon-selector.update.sh/api/dccon-url",
         {
-          query: { channel_name: val.channelName },
+          query: { channel_name: chatOptions.value.twitchChannel },
         }
       );
       if ("dccon_url" in dcconResult) {

@@ -27,10 +27,7 @@
             {{ chat.nickname }}
           </div>
         </div>
-        <div
-          class="message"
-          v-html="messageHtml(chat, emojiToTag, stickerToTag)"
-        ></div>
+        <div class="message" v-html="messageHtml(chat)"></div>
       </div>
     </div>
     <div class="header">
@@ -43,34 +40,13 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatItem, ChatPlatform } from "~/lib/interfaces";
-import { messageHtml } from "~/lib/utils";
+import type { ChatItem } from "~/lib/interfaces";
+import { messageHtml, iconUrl } from "~/lib/utils";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
 
 defineProps<{
   chatItems: ChatItem[];
 }>();
-
-function iconUrl(platform: ChatPlatform): string {
-  switch (platform) {
-    case "chzzk":
-      return "/chzzk.png";
-    case "twitch":
-      return "/twitch.png";
-    case "youtube-live":
-      return "/youtube.png";
-    default:
-      return "";
-  }
-}
-
-function emojiToTag(emojiUrl: string): string {
-  return `<img class="emoji" src="${emojiUrl}" />`;
-}
-
-function stickerToTag(stickerUrl: string): string {
-  return `<img class="sticker" src="${stickerUrl}" />`;
-}
 </script>
 
 <style scoped>

@@ -26,18 +26,15 @@
             {{ chat.nickname }}
           </div>
         </div>
-        <div
-          class="message"
-          v-html="messageHtml(chat, emojiToTag, stickerToTag)"
-        ></div>
+        <div class="message" v-html="messageHtml(chat)"></div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import type { ChatItem, ChatPlatform } from "~/lib/interfaces";
-import { hashCode, messageHtml } from "~/lib/utils";
+import type { ChatItem } from "~/lib/interfaces";
+import { hashCode, messageHtml, iconUrl } from "~/lib/utils";
 import type { CSSProperties } from "vue";
 
 defineProps<{
@@ -62,27 +59,6 @@ const nicknameColorMap: CSSProperties[] = [
     backgroundColor: "rgb(219 92 255)",
   },
 ];
-
-function iconUrl(platform: ChatPlatform): string {
-  switch (platform) {
-    case "chzzk":
-      return "/chzzk.png";
-    case "twitch":
-      return "/twitch.png";
-    case "youtube-live":
-      return "/youtube.png";
-    default:
-      return "";
-  }
-}
-
-function emojiToTag(emojiUrl: string): string {
-  return `<img class="emoji" src="${emojiUrl}" />`;
-}
-
-function stickerToTag(stickerUrl: string): string {
-  return `<img class="sticker" src="${stickerUrl}" />`;
-}
 </script>
 
 <style scoped>
@@ -139,9 +115,6 @@ function stickerToTag(stickerUrl: string): string {
   width: 1.8rem;
   height: 1.8rem;
   vertical-align: middle;
-}
-
-.nickname {
 }
 
 .message {

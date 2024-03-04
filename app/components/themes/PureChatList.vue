@@ -11,7 +11,7 @@
         <TextWithShadow
           class="message"
           :shadowSize="0.1"
-          v-html="messageHtml(chat, emojiToTag, stickerToTag)"
+          v-html="messageHtml(chat)"
         ></TextWithShadow>
       </div>
     </div>
@@ -19,20 +19,12 @@
 </template>
 
 <script setup lang="ts">
-import type { ChatItem, ChatPlatform } from "~/lib/interfaces";
+import type { ChatItem } from "~/lib/interfaces";
 import { hashCode, messageHtml, hashToColor } from "~/lib/utils";
 
 defineProps<{
   chatItems: ChatItem[];
 }>();
-
-function emojiToTag(emojiUrl: string): string {
-  return `<img class="emoji" src="${emojiUrl}" />`;
-}
-
-function stickerToTag(stickerUrl: string): string {
-  return `<img class="sticker" src="${stickerUrl}" />`;
-}
 </script>
 
 <style scoped>

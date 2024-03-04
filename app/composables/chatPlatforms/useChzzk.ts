@@ -48,10 +48,16 @@ function handleChzzkBadges(message: ChzzkMessage) {
   return badges;
 }
 
-export function useChzzk(
-  channelId: MaybeRefOrGetter<string | null>,
-  maxChatSize: MaybeRefOrGetter<number>
-) {
+export function useChzzk(options: {
+  /**
+   * Callback when a broadcaster message is received
+   * @param message The message received
+   * @returns true if the message is handled, false otherwise
+   */
+  onBroadcasterMessage?: (message: string) => boolean;
+}) {
+  const chatOptionsStore = useChatOptionsStore();
+  const { chatOptions } = storeToRefs(chatOptionsStore);
   const messages = ref<ChzzkMessage[]>([]);
 
   const chatItems = computed(() => {
@@ -77,13 +83,13 @@ export function useChzzk(
   const chatChannelId = ref<string | null>(null);
   async function updateCcid() {
     try {
-      if (!toValue(channelId)) {
+      if (!chatOptions.value.chzzkChannelId) {
         return;
       }
       const data = await $fetch<ChzzkChatChannelIdResponse | ApiError>(
         "/api/chzzk/chatChannelId",
         {
-          query: { channelId: toValue(channelId) },
+          query: { channelId: chatOptions.value.chzzkChannelId },
           timeout: 1000,
         }
       );
@@ -112,7 +118,7 @@ export function useChzzk(
       chzzkChatClient.value = null;
     }
 
-    const chzzkChannelId = toValue(channelId);
+    const chzzkChannelId = chatOptions.value.chzzkChannelId;
     if (!chzzkChannelId) {
       return;
     }
@@ -132,7 +138,7 @@ export function useChzzk(
         `Connected to Chzzk ${chzzkChannelId}, ${chatChannelId.value}`
       );
       if (isFirstConnect.value) {
-        newClient.requestRecentChat(toValue(maxChatSize));
+        newClient.requestRecentChat(chatOptions.value.maxChatSize);
         isFirstConnect.value = false;
       }
     });
@@ -147,14 +153,23 @@ export function useChzzk(
     newClient.on("chat", (chat) => {
       console.log("Chzzk chat");
       console.log(chat);
+      if (options.onBroadcasterMessage) {
+        if (chat.profile.userRoleCode === "streamer") {
+          if (options.onBroadcasterMessage(chat.message)) {
+            return;
+          }
+        }
+      }
       messages.value.push({
         chatEvent: chat,
         timestamp: new Date().getTime(),
       });
-      if (messages.value.length > toValue(maxChatSize)) {
-        messages.value = messages.value.slice(
-          messages.value.length - toValue(maxChatSize)
-        );
+      if (chatOptions.value.maxChatSize !== undefined) {
+        if (messages.value.length > chatOptions.value.maxChatSize) {
+          messages.value = messages.value.slice(
+            messages.value.length - chatOptions.value.maxChatSize
+          );
+        }
       }
     });
 
@@ -183,8 +198,7 @@ export function useChzzk(
   }
   watch(
     () => ({
-      channelId: toValue(channelId),
-      maxChatSize: toValue(maxChatSize),
+      chatOptions: chatOptions.value,
       chatChannelId: chatChannelId.value,
     }),
     async (val) => {
@@ -200,7 +214,12 @@ export function useChzzk(
     }
   });
 
+  function clearChat() {
+    messages.value = [];
+  }
+
   return {
     chatItems,
+    clearChat,
   };
 }

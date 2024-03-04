@@ -36,10 +36,16 @@ function handleTwitchBadges(message: TwitchMessage, badgeData: TwitchBadge) {
   return badges;
 }
 
-export function useTwitch(
-  channel: MaybeRefOrGetter<string | null>,
-  maxChatSize: MaybeRefOrGetter<number>
-) {
+export function useTwitch(options: {
+  /**
+   * Callback when a broadcaster message is received
+   * @param message The message received
+   * @returns true if the message is handled, false otherwise
+   */
+  onBroadcasterMessage?: (message: string) => boolean;
+}) {
+  const chatOptionsStore = useChatOptionsStore();
+  const { chatOptions } = storeToRefs(chatOptionsStore);
   const messages = ref<TwitchMessage[]>([]);
 
   const badgeData = ref<TwitchBadge>({});
@@ -74,7 +80,7 @@ export function useTwitch(
       twitchChatClient.value = null;
     }
 
-    const twitchChannel = toValue(channel);
+    const twitchChannel = chatOptions.value.twitchChannel;
 
     if (!twitchChannel) {
       return;
@@ -100,16 +106,25 @@ export function useTwitch(
         message,
         self,
       });
+      if (options.onBroadcasterMessage) {
+        if (tags.badges?.broadcaster === "1") {
+          if (options.onBroadcasterMessage(message)) {
+            return;
+          }
+        }
+      }
       messages.value.push({
         channel,
         tags,
         message,
         timestamp: new Date().getTime(),
       });
-      if (messages.value.length > toValue(maxChatSize)) {
-        messages.value = messages.value.slice(
-          messages.value.length - toValue(maxChatSize)
-        );
+      if (chatOptions.value.maxChatSize !== undefined) {
+        if (messages.value.length > chatOptions.value.maxChatSize) {
+          messages.value = messages.value.slice(
+            messages.value.length - chatOptions.value.maxChatSize
+          );
+        }
       }
     });
     newClient.on("clearchat", (channel) => {
@@ -159,8 +174,7 @@ export function useTwitch(
 
   watch(
     () => ({
-      channel: toValue(channel),
-      maxChatSize: toValue(maxChatSize),
+      chatOptions: chatOptions.value,
     }),
     async (val) => {
       await initChat();
@@ -178,7 +192,12 @@ export function useTwitch(
     }
   });
 
+  function clearChat() {
+    messages.value = [];
+  }
+
   return {
     chatItems,
+    clearChat,
   };
 }
