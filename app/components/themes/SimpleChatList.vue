@@ -3,7 +3,11 @@
     <div class="list">
       <div v-for="chat in chatItems" :key="chat.id" class="item">
         <div class="nickname-box">
-          <img class="icon" :src="iconUrl(chat.platform)" />
+          <img
+            v-if="!chatOptions.isHidePlatformIcon"
+            class="icon"
+            :src="iconUrl(chat.platform)"
+          />
           <img
             v-for="(url, badgeId) in chat.extra.badges ?? {}"
             :key="badgeId"
@@ -39,6 +43,9 @@ import { hashCode, messageHtml, hashToColor, iconUrl } from "~/lib/utils";
 defineProps<{
   chatItems: ChatItem[];
 }>();
+
+const chatOptionsStore = useChatOptionsStore();
+const { chatOptions } = storeToRefs(chatOptionsStore);
 </script>
 
 <style scoped>

@@ -33,6 +33,7 @@ export interface ChatOptions {
   soundEffectType?: SoundEffectType;
   soundEffectVolume?: number;
   isUseOpenDcconSelector?: boolean;
+  isHidePlatformIcon?: boolean;
 }
 
 export interface ChatItem {

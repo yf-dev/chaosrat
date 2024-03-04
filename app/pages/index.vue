@@ -194,19 +194,35 @@
           <label>기타 옵션</label>
         </div>
         <div class="col">
-          <input
-            type="checkbox"
-            class="form-check-input"
-            id="isUseOpenDcconSelector"
-            @change="
-              isUseOpenDcconSelector = ($event.target as HTMLInputElement)
-                .checked
-            "
-            :checked="isUseOpenDcconSelector"
-          />
-          <label class="form-check-label" for="isUseOpenDcconSelector">
-            Open Dccon Selector에서 스티커 불러오기
-          </label>
+          <div>
+            <input
+              type="checkbox"
+              class="form-check-input"
+              id="isUseOpenDcconSelector"
+              @change="
+                isUseOpenDcconSelector = ($event.target as HTMLInputElement)
+                  .checked
+              "
+              :checked="isUseOpenDcconSelector"
+            />
+            <label class="form-check-label" for="isUseOpenDcconSelector">
+              Open Dccon Selector에서 스티커 불러오기
+            </label>
+          </div>
+          <div>
+            <input
+              type="checkbox"
+              class="form-check-input"
+              id="isHidePlatformIcon"
+              @change="
+                isHidePlatformIcon = ($event.target as HTMLInputElement).checked
+              "
+              :checked="isHidePlatformIcon"
+            />
+            <label class="form-check-label" for="isHidePlatformIcon">
+              플랫폼 아이콘 숨기기
+            </label>
+          </div>
         </div>
       </div>
     </div>
@@ -293,6 +309,7 @@ const hiddenMessageRegex = ref<string>("");
 const soundEffectType = ref<SoundEffectType>("none");
 const soundEffectVolume = ref<number>(100);
 const isUseOpenDcconSelector = ref<boolean>(false);
+const isHidePlatformIcon = ref<boolean>(false);
 
 const chatOverlayUrl = computed(() => {
   const url = new URL(requestUrl);
@@ -314,6 +331,9 @@ const chatOverlayUrl = computed(() => {
   url.searchParams.set("soundEffectVolume", soundEffectVolume.value.toString());
   if (isUseOpenDcconSelector.value) {
     url.searchParams.set("isUseOpenDcconSelector", "true");
+  }
+  if (isHidePlatformIcon.value) {
+    url.searchParams.set("isHidePlatformIcon", "true");
   }
   return url.toString();
 });

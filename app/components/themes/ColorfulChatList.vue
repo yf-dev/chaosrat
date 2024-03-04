@@ -10,7 +10,11 @@
             ]
           "
         >
-          <img class="icon" :src="iconUrl(chat.platform)" />
+          <img
+            v-if="!chatOptions.isHidePlatformIcon"
+            class="icon"
+            :src="iconUrl(chat.platform)"
+          />
           <div
             v-if="Object.keys(chat.extra.badges ?? {}).length > 0"
             class="badge-box"
@@ -40,6 +44,9 @@ import type { CSSProperties } from "vue";
 defineProps<{
   chatItems: ChatItem[];
 }>();
+
+const chatOptionsStore = useChatOptionsStore();
+const { chatOptions } = storeToRefs(chatOptionsStore);
 
 const nicknameColorMap: CSSProperties[] = [
   {

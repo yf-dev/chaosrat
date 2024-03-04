@@ -4,7 +4,18 @@
       <div v-for="chat in chatItems" :key="chat.id" class="item">
         <div class="nickname-box">
           <div class="icon-box">
-            <img class="icon" :src="iconUrl(chat.platform)" />
+            <img
+              v-if="!chatOptions.isHidePlatformIcon"
+              class="icon"
+              :src="iconUrl(chat.platform)"
+            />
+            <div
+              v-else
+              class="icon"
+              :style="{
+                backgroundColor: hashToColor(hashCode(chat.nickname), 100, 70),
+              }"
+            ></div>
           </div>
           <IconChevronDown
             class="chevron"
@@ -41,12 +52,15 @@
 
 <script setup lang="ts">
 import type { ChatItem } from "~/lib/interfaces";
-import { messageHtml, iconUrl } from "~/lib/utils";
+import { hashCode, messageHtml, hashToColor, iconUrl } from "~/lib/utils";
 import { IconChevronDown, IconChevronUp } from "@tabler/icons-vue";
 
 defineProps<{
   chatItems: ChatItem[];
 }>();
+
+const chatOptionsStore = useChatOptionsStore();
+const { chatOptions } = storeToRefs(chatOptionsStore);
 </script>
 
 <style scoped>

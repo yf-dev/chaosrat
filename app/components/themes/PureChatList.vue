@@ -25,6 +25,9 @@ import { hashCode, messageHtml, hashToColor } from "~/lib/utils";
 defineProps<{
   chatItems: ChatItem[];
 }>();
+
+const chatOptionsStore = useChatOptionsStore();
+const { chatOptions } = storeToRefs(chatOptionsStore);
 </script>
 
 <style scoped>
