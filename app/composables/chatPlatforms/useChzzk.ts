@@ -33,15 +33,9 @@ function handleChzzkBadges(message: ChzzkMessage) {
       badges[`chzzk/${badge.badgeId}`] = badge.imageUrl;
     }
   }
-  if ("subscription" in message.chatEvent.profile.streamingProperty) {
-    // subscription badge is not supported in chzzk library yet
-    const subscription: {
-      accumulativeMonth: number;
-      badge: {
-        imageUrl: string;
-      };
-      tier: number;
-    } = message.chatEvent.profile.streamingProperty.subscription as any;
+  if (message.chatEvent.profile.streamingProperty.subscription) {
+    const subscription =
+      message.chatEvent.profile.streamingProperty.subscription;
     badges[`chzzk/subscription/${subscription.accumulativeMonth}`] =
       subscription.badge.imageUrl;
   }
@@ -133,7 +127,7 @@ export function useChzzk(options: {
       accessToken: "anonymous",
     });
 
-    newClient.on("connect", (innerChatChannelId) => {
+    newClient.on("connect", () => {
       console.log(
         `Connected to Chzzk ${chzzkChannelId}, ${chatChannelId.value}`
       );
@@ -143,7 +137,7 @@ export function useChzzk(options: {
       }
     });
 
-    newClient.on("disconnect", (innerChatChannelId) => {
+    newClient.on("disconnect", () => {
       console.log(
         `Disconnected from Chzzk ${chzzkChannelId}, ${chatChannelId.value}`
       );
