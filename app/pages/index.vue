@@ -297,6 +297,9 @@
         ></iframe>
       </ClientOnly>
     </div>
+    <footer class="global-footer row">
+      <a href="https://github.com/yf-dev/chaosrat">Github</a>
+    </footer>
   </div>
 </template>
 
@@ -441,5 +444,11 @@ body.index {
 
 .chat-overlay {
   height: 45rem;
+}
+
+.global-footer {
+  margin: 2rem 0;
+  padding-top: 2rem;
+  justify-content: center;
 }
 </style>
