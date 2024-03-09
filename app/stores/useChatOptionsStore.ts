@@ -25,6 +25,13 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
     return route.query.youtubeHandle ?? undefined;
   });
 
+  const kickChannel = computed<string | undefined>(() => {
+    if (Array.isArray(route.query.kickChannel)) {
+      return route.query.kickChannel[0] ?? undefined;
+    }
+    return route.query.kickChannel ?? undefined;
+  });
+
   const theme = computed<ChatTheme | undefined>(() => {
     const themeValue = Array.isArray(route.query.theme)
       ? route.query.theme[0]
@@ -139,6 +146,7 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
     chzzkChannelId: chzzkChannelId.value,
     twitchChannel: twitchChannel.value,
     youtubeHandle: youtubeHandle.value,
+    kickChannel: kickChannel.value,
     theme: theme.value,
     maxChatSize: maxChatSize.value,
     hiddenUsernameRegex: hiddenUsernameRegex.value,
@@ -155,6 +163,7 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       chzzkChannelId: chzzkChannelId.value,
       twitchChannel: twitchChannel.value,
       youtubeHandle: youtubeHandle.value,
+      kickChannel: kickChannel.value,
       theme: theme.value,
       maxChatSize: maxChatSize.value,
       hiddenUsernameRegex: hiddenUsernameRegex.value,

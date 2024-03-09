@@ -30,6 +30,8 @@ export default defineEventHandler(
         chatChannelId: chatChannelId,
       };
     } catch (error) {
+      console.log("Chzzk chatChannelId Api Error");
+      console.error(error);
       return {
         status: "ERROR",
         error: "Internal Server Error",

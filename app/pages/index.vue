@@ -65,6 +65,25 @@
       </div>
       <div class="row">
         <div class="col-2">
+          <label for="kickChannel">Kick 채널 ID</label>
+        </div>
+        <div class="col">
+          <input
+            type="text"
+            class="form-control"
+            id="kickChannel"
+            @input="kickChannel = ($event.target as HTMLInputElement).value"
+            :value="kickChannel"
+            placeholder="sleeping-c-elegans"
+          />
+          <p>
+            Kick 채널 페이지 URL의 뒤쪽에서 확인할 수 있습니다.<br />
+            ex) https://kick.com/<b>sleeping-c-elegans</b>
+          </p>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-2">
           <label for="theme">테마</label>
         </div>
         <div class="col">
@@ -324,6 +343,7 @@ const requestUrl = useRequestURL();
 const chzzkChannelId = ref<string>("");
 const twitchChannel = ref<string>("");
 const youtubeHandle = ref<string>("");
+const kickChannel = ref<string>("");
 const theme = ref<ChatTheme>("default");
 const maxChatSize = ref<number>(100);
 const hiddenUsernameRegex = ref<string>("");
@@ -340,6 +360,7 @@ const chatOverlayUrl = computed(() => {
   url.searchParams.set("chzzkChannelId", chzzkChannelId.value);
   url.searchParams.set("twitchChannel", twitchChannel.value);
   url.searchParams.set("youtubeHandle", youtubeHandle.value);
+  url.searchParams.set("kickChannel", kickChannel.value);
   url.searchParams.set("theme", theme.value);
   url.searchParams.set("maxChatSize", maxChatSize.value.toString());
   url.searchParams.set(

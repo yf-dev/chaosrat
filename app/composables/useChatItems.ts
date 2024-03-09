@@ -27,6 +27,7 @@ export function useChatItems(options: ChatItemsOptions) {
       chzzkClearChat();
       twitchClearChat();
       youtubeLiveClearChat();
+      kickClearChat();
     },
   });
 
@@ -40,12 +41,16 @@ export function useChatItems(options: ChatItemsOptions) {
     useYoutubeLive({
       onBroadcasterMessage: onBroadcasterMessage,
     });
+  const { chatItems: kickChatItems, clearChat: kickClearChat } = useKick({
+    onBroadcasterMessage: onBroadcasterMessage,
+  });
 
   const chatItems = computed(() => {
     return [
       ...chzzkChatItems.value,
       ...twitchChatItems.value,
       ...youtubeLiveChatItems.value,
+      ...kickChatItems.value,
     ]
       .filter(options.filter ?? (() => true))
       .sort((a, b) => a.timestamp - b.timestamp)

@@ -167,6 +167,8 @@ export function iconUrl(platform: ChatPlatform): string {
       return "/twitch.png";
     case "youtube-live":
       return "/youtube.png";
+    case "kick":
+      return "/kick.png";
     default:
       return "";
   }

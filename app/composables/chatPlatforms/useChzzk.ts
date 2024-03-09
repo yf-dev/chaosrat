@@ -95,11 +95,11 @@ export function useChzzk(options: {
         chatChannelId.value = data.chatChannelId;
       }
     } catch (e) {
-      console.log("Chzzk getCcid Error");
+      console.log("Chzzk updateCcid Error");
       console.error(e);
     }
   }
-  useTimeoutPoll(updateCcid, 5000, { immediate: true });
+  useTimeoutPoll(updateCcid, 15000, { immediate: true });
 
   const chzzkChatClient = ref<ChzzkChat | null>(null);
   const isFirstConnect = ref<boolean>(true);

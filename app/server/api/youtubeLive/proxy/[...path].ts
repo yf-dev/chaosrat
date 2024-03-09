@@ -26,6 +26,8 @@ export default defineEventHandler(
         },
       });
     } catch (error) {
+      console.log("Youtube Live proxy Api Error");
+      console.error(error);
       return {
         status: "ERROR",
         error: "Internal Server Error",

@@ -98,6 +98,8 @@ export default defineEventHandler(
         badge: badgeData,
       };
     } catch (error) {
+      console.log("Twitch badges Api Error");
+      console.error(error);
       return {
         status: "ERROR",
         error: "Internal Server Error",

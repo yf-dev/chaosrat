@@ -13,7 +13,7 @@ export interface ChatExtra {
   };
 }
 
-export type ChatPlatform = "chzzk" | "twitch" | "youtube-live";
+export type ChatPlatform = "chzzk" | "twitch" | "youtube-live" | "kick";
 export type ChatTheme =
   | "default"
   | "colorful"
@@ -36,6 +36,7 @@ export interface ChatOptions {
   chzzkChannelId?: string;
   twitchChannel?: string;
   youtubeHandle?: string;
+  kickChannel?: string;
   theme?: ChatTheme;
   maxChatSize?: number;
   hiddenUsernameRegex?: string;
