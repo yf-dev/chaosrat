@@ -144,23 +144,37 @@
           <label for="soundEffectType">효과음 종류</label>
         </div>
         <div class="col">
-          <select
-            class="form-control"
-            id="soundEffectType"
-            @change="
-              soundEffectType = ($event.target as HTMLSelectElement)
-                .value as SoundEffectType
-            "
-            :value="soundEffectType"
-          >
-            <option
-              v-for="option in soundEffectTypeOptions"
-              :key="option.value"
-              :value="option.value"
+          <div>
+            <select
+              class="form-control"
+              id="soundEffectType"
+              @change="
+                soundEffectType = ($event.target as HTMLSelectElement)
+                  .value as SoundEffectType
+              "
+              :value="soundEffectType"
             >
-              {{ option.label }}
-            </option>
-          </select>
+              <option
+                v-for="option in soundEffectTypeOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ option.label }}
+              </option>
+            </select>
+          </div>
+          <div v-if="soundEffectType === 'custom'">
+            <input
+              type="text"
+              class="form-control"
+              id="soundEffectCustomUrl"
+              @input="
+                soundEffectCustomUrl = ($event.target as HTMLInputElement).value
+              "
+              :value="soundEffectCustomUrl"
+              placeholder="https://example.com/sound-effect.mp3"
+            />
+          </div>
         </div>
       </div>
       <div class="row">
@@ -284,17 +298,25 @@ const themeOptions: {
   label: string;
 }[] = [
   { value: "default", label: "기본" },
-  { value: "simple", label: "심플" },
-  { value: "pure", label: "퓨어" },
-  { value: "colorful", label: "컬러풀" },
-  { value: "video-master", label: "비디오 마스터" },
+  { value: "simple", label: "Simple" },
+  { value: "pure", label: "Pure" },
+  { value: "colorful", label: "Colorful" },
+  { value: "video-master", label: "Video Master" },
 ];
 const soundEffectTypeOptions: {
   value: SoundEffectType;
   label: string;
 }[] = [
   { value: "none", label: "없음" },
-  { value: "default", label: "기본" },
+  { value: "beep", label: "Beep" },
+  { value: "bell", label: "Bell" },
+  { value: "pingpong-bounce", label: "Pingpong Bounce" },
+  { value: "retro-acute", label: "Retro Acute" },
+  { value: "retro-blob", label: "Retro Blob" },
+  { value: "retro-coin", label: "Retro Coin" },
+  { value: "scifi-terminal", label: "Sci-fi Terminal" },
+  { value: "synth-beep", label: "Synth Beep" },
+  { value: "custom", label: "커스텀" },
 ];
 
 const requestUrl = useRequestURL();
@@ -308,6 +330,7 @@ const hiddenUsernameRegex = ref<string>("");
 const hiddenMessageRegex = ref<string>("");
 const soundEffectType = ref<SoundEffectType>("none");
 const soundEffectVolume = ref<number>(100);
+const soundEffectCustomUrl = ref<string>("");
 const isUseOpenDcconSelector = ref<boolean>(false);
 const isHidePlatformIcon = ref<boolean>(false);
 
@@ -329,6 +352,9 @@ const chatOverlayUrl = computed(() => {
   );
   url.searchParams.set("soundEffectType", soundEffectType.value);
   url.searchParams.set("soundEffectVolume", soundEffectVolume.value.toString());
+  if (soundEffectType.value === "custom") {
+    url.searchParams.set("soundEffectCustomUrl", soundEffectCustomUrl.value);
+  }
   if (isUseOpenDcconSelector.value) {
     url.searchParams.set("isUseOpenDcconSelector", "true");
   }

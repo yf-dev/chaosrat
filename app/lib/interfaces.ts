@@ -20,7 +20,17 @@ export type ChatTheme =
   | "video-master"
   | "simple"
   | "pure";
-export type SoundEffectType = "none" | "default";
+export type SoundEffectType =
+  | "none"
+  | "beep"
+  | "bell"
+  | "pingpong-bounce"
+  | "retro-acute"
+  | "retro-blob"
+  | "retro-coin"
+  | "scifi-terminal"
+  | "synth-beep"
+  | "custom";
 
 export interface ChatOptions {
   chzzkChannelId?: string;
@@ -32,6 +42,7 @@ export interface ChatOptions {
   hiddenMessageRegex?: string;
   soundEffectType?: SoundEffectType;
   soundEffectVolume?: number;
+  soundEffectCustomUrl?: string;
   isUseOpenDcconSelector?: boolean;
   isHidePlatformIcon?: boolean;
 }

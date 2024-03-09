@@ -14,7 +14,7 @@ import {
   PureChatList,
 } from "#components";
 import { encodeFormatString } from "~/lib/utils";
-import type { ChatItem, SoundEffectType } from "~/lib/interfaces";
+import type { ChatItem } from "~/lib/interfaces";
 
 const chatOptionsStore = useChatOptionsStore();
 const { chatOptions } = storeToRefs(chatOptionsStore);
@@ -32,6 +32,32 @@ const chatListComponent = computed(() => {
     case "default":
     default:
       return DefaultChatList;
+  }
+});
+
+const soundEffectUrl = computed(() => {
+  switch (chatOptions.value.soundEffectType) {
+    case "beep":
+      return `/sound-effects/beep.mp3`;
+    case "bell":
+      return `/sound-effects/bell.mp3`;
+    case "pingpong-bounce":
+      return `/sound-effects/pingpong-bounce.mp3`;
+    case "retro-acute":
+      return `/sound-effects/retro-acute.mp3`;
+    case "retro-blob":
+      return `/sound-effects/retro-blob.mp3`;
+    case "retro-coin":
+      return `/sound-effects/retro-coin.mp3`;
+    case "scifi-terminal":
+      return `/sound-effects/scifi-terminal.mp3`;
+    case "synth-beep":
+      return `/sound-effects/synth-beep.mp3`;
+    case "custom":
+      return chatOptions.value.soundEffectCustomUrl || null;
+    case "none":
+    default:
+      return null;
   }
 });
 
@@ -64,16 +90,10 @@ function filterChatItems(chat: ChatItem): boolean {
 }
 
 function playSoundEffect() {
-  let soundEffect: SoundEffectType = "none";
-  if (chatOptions.value.soundEffectType === "default") {
-    soundEffect = "default";
-  }
-  if (soundEffect === "none") {
+  if (!soundEffectUrl.value) {
     return;
   }
-  const audio = new Audio(
-    `/sound-effects/${chatOptions.value.soundEffectType}.mp3`
-  );
+  const audio = new Audio(soundEffectUrl.value);
   audio.volume =
     chatOptions.value.soundEffectVolume === undefined
       ? 1.0

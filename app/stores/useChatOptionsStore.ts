@@ -85,7 +85,15 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       ? route.query.soundEffectType[0]
       : route.query.soundEffectType;
     switch (soundEffectTypeValue) {
-      case "default":
+      case "beep":
+      case "bell":
+      case "pingpong-bounce":
+      case "retro-acute":
+      case "retro-blob":
+      case "retro-coin":
+      case "scifi-terminal":
+      case "synth-beep":
+      case "custom":
       case "none":
         return soundEffectTypeValue;
       default:
@@ -104,6 +112,13 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       return undefined;
     }
     return Number.parseInt(route.query.soundEffectVolume, 10);
+  });
+
+  const soundEffectCustomUrl = computed<string | undefined>(() => {
+    if (Array.isArray(route.query.soundEffectCustomUrl)) {
+      return route.query.soundEffectCustomUrl[0] ?? undefined;
+    }
+    return route.query.soundEffectCustomUrl ?? undefined;
   });
 
   const isUseOpenDcconSelector = computed<boolean | undefined>(() => {
@@ -130,6 +145,7 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
     hiddenMessageRegex: hiddenMessageRegex.value,
     soundEffectType: soundEffectType.value,
     soundEffectVolume: soundEffectVolume.value,
+    soundEffectCustomUrl: soundEffectCustomUrl.value,
     isUseOpenDcconSelector: isUseOpenDcconSelector.value,
     isHidePlatformIcon: isHidePlatformIcon.value,
   });
@@ -145,6 +161,7 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       hiddenMessageRegex: hiddenMessageRegex.value,
       soundEffectType: soundEffectType.value,
       soundEffectVolume: soundEffectVolume.value,
+      soundEffectCustomUrl: soundEffectCustomUrl.value,
       isUseOpenDcconSelector: isUseOpenDcconSelector.value,
       isHidePlatformIcon: isHidePlatformIcon.value,
     }),
