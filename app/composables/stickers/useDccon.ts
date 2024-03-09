@@ -16,7 +16,8 @@ export function useDccon(dcconUrl: MaybeRefOrGetter<string | null>) {
         });
       });
     });
-    return items;
+    // Sort by length of id to match longer keyword first
+    return items.sort((a, b) => b.id.length - a.id.length);
   });
 
   async function initSticker() {
