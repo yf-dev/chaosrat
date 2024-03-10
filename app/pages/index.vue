@@ -214,6 +214,7 @@
               )
             "
             :value="soundEffectVolume"
+            :disabled="soundEffectType === 'none'"
           />
         </div>
         <div class="col-1">
@@ -237,9 +238,13 @@
                   .checked
               "
               :checked="isUseOpenDcconSelector"
+              :disabled="!twitchChannel"
             />
             <label class="form-check-label" for="isUseOpenDcconSelector">
               Open Dccon Selector에서 스티커 불러오기
+              <span class="tooltip" title="트위치 채널 ID를 설정해야 동작합니다"
+                >?</span
+              >
             </label>
           </div>
           <div>
@@ -360,28 +365,52 @@ const isHidePlatformIcon = ref<boolean>(false);
 const chatOverlayUrl = computed(() => {
   const url = new URL(requestUrl);
   url.pathname = "/chat";
-  url.searchParams.set("chzzkChannelId", chzzkChannelId.value);
-  url.searchParams.set("twitchChannel", twitchChannel.value);
-  url.searchParams.set("youtubeHandle", youtubeHandle.value);
-  url.searchParams.set("kickChannel", kickChannel.value);
-  url.searchParams.set("theme", theme.value);
-  url.searchParams.set("maxChatSize", maxChatSize.value.toString());
-  url.searchParams.set(
-    "hiddenUsernameRegex",
-    encodeUrlSafeBase64(hiddenUsernameRegex.value)
-  );
-  url.searchParams.set(
-    "hiddenMessageRegex",
-    encodeUrlSafeBase64(hiddenMessageRegex.value)
-  );
-  url.searchParams.set("soundEffectType", soundEffectType.value);
-  url.searchParams.set("soundEffectVolume", soundEffectVolume.value.toString());
-  if (soundEffectType.value === "custom") {
-    url.searchParams.set("soundEffectCustomUrl", soundEffectCustomUrl.value);
+  if (chzzkChannelId.value) {
+    url.searchParams.set("chzzkChannelId", chzzkChannelId.value);
   }
-  if (isUseOpenDcconSelector.value) {
-    url.searchParams.set("isUseOpenDcconSelector", "true");
+  if (twitchChannel.value) {
+    url.searchParams.set("twitchChannel", twitchChannel.value);
+    if (isUseOpenDcconSelector.value) {
+      url.searchParams.set("isUseOpenDcconSelector", "true");
+    }
   }
+  if (youtubeHandle.value) {
+    url.searchParams.set("youtubeHandle", youtubeHandle.value);
+  }
+  if (kickChannel.value) {
+    url.searchParams.set("kickChannel", kickChannel.value);
+  }
+  if (theme.value !== "default") {
+    url.searchParams.set("theme", theme.value);
+  }
+  if (maxChatSize.value !== 100) {
+    url.searchParams.set("maxChatSize", maxChatSize.value.toString());
+  }
+  if (hiddenUsernameRegex.value) {
+    url.searchParams.set(
+      "hiddenUsernameRegex",
+      encodeUrlSafeBase64(hiddenUsernameRegex.value)
+    );
+  }
+  if (hiddenMessageRegex.value) {
+    url.searchParams.set(
+      "hiddenMessageRegex",
+      encodeUrlSafeBase64(hiddenMessageRegex.value)
+    );
+  }
+  if (soundEffectType.value !== "none") {
+    url.searchParams.set("soundEffectType", soundEffectType.value);
+    if (soundEffectType.value === "custom") {
+      url.searchParams.set("soundEffectCustomUrl", soundEffectCustomUrl.value);
+    }
+    if (soundEffectVolume.value !== 100) {
+      url.searchParams.set(
+        "soundEffectVolume",
+        soundEffectVolume.value.toString()
+      );
+    }
+  }
+
   if (isHidePlatformIcon.value) {
     url.searchParams.set("isHidePlatformIcon", "true");
   }
@@ -432,6 +461,18 @@ body.index {
 
 .input-with-button .button {
   flex-shrink: 0;
+}
+
+.tooltip {
+  display: inline-block;
+  font-size: 1.1rem;
+  font-weight: bold;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 0.8rem;
+  text-align: center;
+  background-color: var(--color-lightGrey);
+  cursor: help;
 }
 
 .result-card {
