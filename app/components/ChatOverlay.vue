@@ -94,10 +94,12 @@ function playSoundEffect() {
     return;
   }
   const audio = new Audio(soundEffectUrl.value);
-  audio.volume =
-    chatOptions.value.soundEffectVolume === undefined
-      ? 1.0
-      : chatOptions.value.soundEffectVolume / 100;
+  const storedVolume = chatOptions.value.soundEffectVolume;
+  const soundEffectVolume =
+    typeof storedVolume === "number" && !Number.isNaN(storedVolume)
+      ? storedVolume / 100
+      : 1.0;
+  audio.volume = soundEffectVolume;
   audio.play();
 }
 
