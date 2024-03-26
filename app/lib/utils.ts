@@ -173,3 +173,12 @@ export function iconUrl(platform: ChatPlatform): string {
       return "";
   }
 }
+
+export function parseIntOrDefault(
+  str: string,
+  radix: number,
+  defaultValue: number
+): number {
+  const parsed = parseInt(str, radix);
+  return isNaN(parsed) ? defaultValue : parsed;
+}

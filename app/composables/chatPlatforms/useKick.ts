@@ -1,5 +1,6 @@
 import { useTimeoutPoll, useWebSocket } from "@vueuse/core";
 import type { ChatItem } from "~/lib/interfaces";
+import { parseIntOrDefault } from "~/lib/utils";
 
 interface KickGetChannelApiResponse {
   chatroom: {
@@ -68,7 +69,7 @@ function handleKickEmojis(message: KickMessage) {
 
   const emotes = Array.from(text.matchAll(emoteRegex)).map((match) => {
     return {
-      id: parseInt(match[1]),
+      id: parseIntOrDefault(match[1], 10, 0),
       name: match[2],
     };
   });

@@ -115,9 +115,10 @@
             class="form-control"
             id="maxChatSize"
             @input="
-              maxChatSize = parseInt(
+              maxChatSize = parseIntOrDefault(
                 ($event.target as HTMLInputElement).value,
-                10
+                10,
+                100
               )
             "
             :value="maxChatSize"
@@ -208,9 +209,10 @@
             class="form-control"
             id="soundEffectVolume"
             @input="
-              soundEffectVolume = Number.parseInt(
+              soundEffectVolume = parseIntOrDefault(
                 ($event.target as HTMLInputElement).value,
-                10
+                10,
+                100
               )
             "
             :value="soundEffectVolume"
@@ -311,7 +313,7 @@
 <script setup lang="ts">
 import { useClipboard } from "@vueuse/core";
 import type { ChatTheme, SoundEffectType } from "~/lib/interfaces";
-import { encodeUrlSafeBase64 } from "~/lib/utils";
+import { encodeUrlSafeBase64, parseIntOrDefault } from "~/lib/utils";
 
 useHead({
   title: "ChaosRat - 채팅 오버레이 URL 생성",

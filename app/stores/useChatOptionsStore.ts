@@ -1,5 +1,5 @@
 import type { ChatOptions, ChatTheme, SoundEffectType } from "~/lib/interfaces";
-import { decodeUrlSafeBase64 } from "~/lib/utils";
+import { decodeUrlSafeBase64, parseIntOrDefault } from "~/lib/utils";
 
 export const useChatOptionsStore = defineStore("chatOptions", () => {
   const route = useRoute();
@@ -53,12 +53,12 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       if (route.query.maxChatSize[0] === null) {
         return undefined;
       }
-      return Number.parseInt(route.query.maxChatSize[0], 10);
+      return parseIntOrDefault(route.query.maxChatSize[0], 10, 100);
     }
     if (route.query.maxChatSize === null) {
       return undefined;
     }
-    return Number.parseInt(route.query.maxChatSize, 10);
+    return parseIntOrDefault(route.query.maxChatSize, 10, 100);
   });
 
   const hiddenUsernameRegex = computed<string | undefined>(() => {
@@ -113,12 +113,12 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       if (route.query.soundEffectVolume[0] === null) {
         return undefined;
       }
-      return Number.parseInt(route.query.soundEffectVolume[0], 10);
+      return parseIntOrDefault(route.query.soundEffectVolume[0], 10, 100);
     }
     if (route.query.soundEffectVolume === null) {
       return undefined;
     }
-    return Number.parseInt(route.query.soundEffectVolume, 10);
+    return parseIntOrDefault(route.query.soundEffectVolume, 10, 100);
   });
 
   const soundEffectCustomUrl = computed<string | undefined>(() => {
