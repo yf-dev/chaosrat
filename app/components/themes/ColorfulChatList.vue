@@ -73,6 +73,7 @@ const nicknameColorMap: CSSProperties[] = [
   position: relative;
   height: 100vh;
   width: 100vw;
+  overflow-wrap: break-word;
   font-family: "ONE-Mobile-POP", "Pretendard Variable", Pretendard,
     -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue",
     "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",

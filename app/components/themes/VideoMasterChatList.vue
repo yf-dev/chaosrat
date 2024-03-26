@@ -68,6 +68,7 @@ const { chatOptions } = storeToRefs(chatOptionsStore);
   position: relative;
   height: 100vh;
   width: 100vw;
+  overflow-wrap: break-word;
   background-color: rgb(29, 29, 29);
 }
 .list {
