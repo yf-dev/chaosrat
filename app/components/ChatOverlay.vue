@@ -98,7 +98,15 @@ function playSoundEffect() {
     chatOptions.value.soundEffectVolume === undefined
       ? 1.0
       : chatOptions.value.soundEffectVolume / 100;
-  audio.play();
+  audio
+    .play()
+    .then(() => {
+      audio.remove();
+    })
+    .catch((error) => {
+      // On chrome, audio.play() will be rejected if the user has not interacted with the page.
+      console.error(error);
+    });
 }
 
 const { chatItems } = useChatItems({
