@@ -21,7 +21,11 @@
           />
           <p>
             치지직 채널 페이지 URL의 뒤쪽에서 확인할 수 있습니다.<br />
-            ex) https://chzzk.naver.com/<b>6d6e213a87a1fa5315a0da74ac15946e</b>
+            ex) https://chzzk.naver.com/<b>6d6e213a87a1fa5315a0da74ac15946e</b
+            ><br />
+            <span class="warning"
+              >⚠️주의: 연령 제한이 걸린 채널은 채팅이 표시되지 않습니다.</span
+            >
           </p>
         </div>
       </div>
@@ -463,6 +467,10 @@ body.index {
 
 .input-with-button .button {
   flex-shrink: 0;
+}
+
+.warning {
+  color: var(--color-error);
 }
 
 .tooltip {
