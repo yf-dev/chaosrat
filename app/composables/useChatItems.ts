@@ -31,7 +31,11 @@ export function useChatItems(options: ChatItemsOptions) {
     },
   });
 
-  const { chatItems: chzzkChatItems, clearChat: chzzkClearChat } = useChzzk({
+  const {
+    chatItems: chzzkChatItems,
+    clearChat: chzzkClearChat,
+    errors: chzzkErrors,
+  } = useChzzk({
     onBroadcasterMessage: onBroadcasterMessage,
   });
   const { chatItems: twitchChatItems, clearChat: twitchClearChat } = useTwitch({
@@ -57,6 +61,10 @@ export function useChatItems(options: ChatItemsOptions) {
       .slice(-(chatOptions.value.maxChatSize ?? 100));
   });
 
+  const errors = computed(() => {
+    return [...chzzkErrors.value];
+  });
+
   const latestChatTimestamp = ref<number>(0);
   watch(
     () => chatItems.value,
@@ -72,5 +80,5 @@ export function useChatItems(options: ChatItemsOptions) {
     },
     { immediate: true }
   );
-  return { chatItems };
+  return { chatItems, errors };
 }

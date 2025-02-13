@@ -1,4 +1,18 @@
 <template>
+  <!-- Show errors -->
+  <div v-if="errors.length > 0" class="error-box">
+    <div
+      v-for="error in errors"
+      :key="error.id"
+      :class="{
+        'error-item': true,
+        clickable: error.onClick !== undefined,
+      }"
+      @click="error.onClick && error.onClick()"
+    >
+      {{ error.message }}
+    </div>
+  </div>
   <component
     :is="chatListComponent"
     :chatItems="processedChatItems"
@@ -109,7 +123,7 @@ function playSoundEffect() {
     });
 }
 
-const { chatItems } = useChatItems({
+const { chatItems, errors } = useChatItems({
   filter: filterChatItems,
   onNewChatItem: (chat) => {
     playSoundEffect();
@@ -175,3 +189,18 @@ const processedChatItems = computed(() => {
   });
 });
 </script>
+
+<style scoped>
+.error-box {
+  margin: 0.5rem;
+}
+.error-item {
+  padding: 1rem;
+  background-color: rgba(251, 255, 0, 0.5);
+  border-radius: 0.5rem;
+}
+
+.error-item.clickable {
+  cursor: pointer;
+}
+</style>

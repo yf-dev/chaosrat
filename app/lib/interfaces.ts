@@ -81,12 +81,29 @@ export interface DcconData {
 
 export interface ApiError {
   status: "ERROR";
+  code: string;
   error: string;
 }
 
-export interface ChzzkChatChannelIdResponse {
+export interface ApiOk {
   status: "OK";
+}
+
+export interface ChzzkChatChannelIdResponse extends ApiOk {
   chatChannelId: string;
+}
+
+export interface ChzzkAuthLoginResponse extends ApiOk {
+  authUrl: string;
+}
+
+export interface ChzzkMeResponse extends ApiOk {
+  channelId: string;
+  channelName: string;
+}
+
+export interface ChzzkSessionOpenResponse extends ApiOk {
+  url: string;
 }
 
 export interface TwitchBadge {
@@ -94,7 +111,13 @@ export interface TwitchBadge {
   [key: string]: string;
 }
 
-export interface TwitchBadgesResponse {
-  status: "OK";
+export interface TwitchBadgesResponse extends ApiOk {
   badge: TwitchBadge;
+}
+
+export interface ChatPlatformError {
+  id: string;
+  platform: ChatPlatform;
+  message: string;
+  onClick?: () => void;
 }

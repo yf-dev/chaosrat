@@ -11,21 +11,19 @@
           <label for="chzzkChannelId">치지직 채널 ID</label>
         </div>
         <div class="col input-with-prefix">
-          <input
-            type="text"
-            class="form-control"
-            id="chzzkChannelId"
-            @input="chzzkChannelId = ($event.target as HTMLInputElement).value"
-            :value="chzzkChannelId"
-            placeholder="6d6e213a87a1fa5315a0da74ac15946e"
-          />
           <p>
-            치지직 채널 페이지 URL의 뒤쪽에서 확인할 수 있습니다.<br />
-            ex) https://chzzk.naver.com/<b>6d6e213a87a1fa5315a0da74ac15946e</b
-            ><br />
-            <span class="warning"
-              >⚠️주의: 연령 제한이 걸린 채널은 채팅이 표시되지 않습니다.</span
-            >
+            <span v-if="!isChzzkLoggedIn">
+              치지직 채널에 연결하기 위해서는 먼저
+              <a class="link" @click.prevent="loginToChzzk">치지직 로그인</a>이
+              필요합니다.<br />
+            </span>
+            <span v-else>
+              현재 로그인한 치지직 채널: {{ chzzkMeChannelName }}(<a
+                class="link"
+                @click.prevent="logoutFromChzzk"
+                >로그아웃</a
+              >)<br />
+            </span>
           </p>
         </div>
       </div>
@@ -316,7 +314,14 @@
 
 <script setup lang="ts">
 import { useClipboard } from "@vueuse/core";
-import type { ChatTheme, SoundEffectType } from "~/lib/interfaces";
+import type {
+  ChatTheme,
+  SoundEffectType,
+  ApiError,
+  ChzzkAuthLoginResponse,
+  ApiOk,
+  ChzzkMeResponse,
+} from "~/lib/interfaces";
 import { encodeUrlSafeBase64, parseIntOrDefault } from "~/lib/utils";
 
 useHead({
@@ -355,6 +360,8 @@ const soundEffectTypeOptions: {
 const requestUrl = useRequestURL();
 
 const chzzkChannelId = ref<string>("");
+const chzzkMeChannelId = ref<string>("");
+const chzzkMeChannelName = ref<string>("");
 const twitchChannel = ref<string>("");
 const youtubeHandle = ref<string>("");
 const kickChannel = ref<string>("");
@@ -367,6 +374,8 @@ const soundEffectVolume = ref<number>(100);
 const soundEffectCustomUrl = ref<string>("");
 const isUseOpenDcconSelector = ref<boolean>(false);
 const isHidePlatformIcon = ref<boolean>(false);
+
+const isChzzkLoggedIn = ref<boolean>(false);
 
 const chatOverlayUrl = computed(() => {
   const url = new URL(requestUrl);
@@ -427,6 +436,59 @@ const { copy: copyChatOverlayUrl, copied: copiedChatOverlayUrl } = useClipboard(
     source: chatOverlayUrl,
   }
 );
+
+async function loginToChzzk() {
+  try {
+    const response = await $fetch<ChzzkAuthLoginResponse | ApiError>(
+      "/api/chzzk/auth/login",
+      {
+        query: { redirectTo: `${requestUrl.pathname}${requestUrl.search}` },
+      }
+    );
+    if (response.status === "OK") {
+      window.location.href = response.authUrl;
+    } else {
+      console.error("Failed to get Chzzk auth URL:", response);
+    }
+  } catch (e) {
+    console.error("Failed to get Chzzk auth URL:", e);
+  }
+}
+
+async function logoutFromChzzk() {
+  try {
+    const response = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout");
+    if (response.status === "OK") {
+      isChzzkLoggedIn.value = false;
+      chzzkMeChannelId.value = "";
+      chzzkMeChannelName.value = "";
+      chzzkChannelId.value = "";
+    } else {
+      console.error("Failed to logout from Chzzk:", response);
+    }
+  } catch (e) {
+    console.error("Failed to logout from Chzzk:", e);
+  }
+}
+
+onMounted(async () => {
+  try {
+    const response = await $fetch<ChzzkMeResponse | ApiError>("/api/chzzk/me");
+    if (response.status === "OK") {
+      isChzzkLoggedIn.value = true;
+      chzzkChannelId.value = response.channelId;
+      chzzkMeChannelId.value = response.channelId;
+      chzzkMeChannelName.value = response.channelName;
+
+      // try to refresh token
+      await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
+    } else {
+      console.error("Failed to get Chzzk me:", response);
+    }
+  } catch (e) {
+    console.error("Failed to check Chzzk me:", e);
+  }
+});
 </script>
 
 <style>
@@ -473,6 +535,11 @@ body.index {
   color: var(--color-error);
 }
 
+.link {
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
 .tooltip {
   display: inline-block;
   font-size: 1.1rem;
@@ -489,6 +556,7 @@ body.index {
   margin-top: 2rem;
   padding-top: 2rem;
 }
+
 .preview-card {
   margin-top: 2rem;
 }

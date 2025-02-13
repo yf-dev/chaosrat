@@ -7,6 +7,9 @@ services:
         - NODE_ENV=dev
         - NUXT_TWITCH_CLIENT_ID=your-twitch-client-id
         - NUXT_TWITCH_CLIENT_SECRET=your-twitch-client-secret
+        - NUXT_CHZZK_CLIENT_ID=your-chzzk-client-id
+        - NUXT_CHZZK_CLIENT_SECRET=your-chzzk-client-secret
+        - NUXT_PUBLIC_BASE_URL=http://localhost:3000
     restart: unless-stopped
     ports:
       - "3000:3000"

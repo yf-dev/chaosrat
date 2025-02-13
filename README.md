@@ -45,9 +45,19 @@ ChaosRat은 [OBS Studio](https://obsproject.com/)와 같은 방송 소프트웨�
 docker-compose up
 ```
 
+### 트위치 연동
+
 트위치 연동을 위해서는 [Twitch Developers](https://dev.twitch.tv/)에서 애플리케이션을 등록하고 클라이언트 ID와 클라이언트 시크릿을 발급받아야 합니다.
 
 발급받은 클라이언트 ID와 클라이언트 시크릿을 `docker-compose.yml` 파일의 `NUXT_TWITCH_CLIENT_ID`와 `NUXT_TWITCH_CLIENT_SECRET`에 입력해주세요.
+
+### 치지직 연동
+
+치지직 연동을 위해서는 [치지직 Developers](https://developers.chzzk.naver.com)에서 애플리케이션을 등록하고 클라이언트 ID와 클라이언트 시크릿을 발급받아야 합니다.
+
+등록한 애플리케이션에는 `채팅 메시지 조회`, `유저 조회` API Scope가 필요합니다.
+
+발급받은 클라이언트 ID와 클라이언트 시크릿을 `docker-compose.yml` 파일의 `NUXT_CHZZK_CLIENT_ID`와 `NUXT_CHZZK_CLIENT_SECRET`에 입력해주세요.
 
 ## License
 

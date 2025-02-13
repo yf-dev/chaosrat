@@ -8,6 +8,7 @@ export default defineEventHandler(
       if (!channelId || typeof channelId !== "string") {
         return {
           status: "ERROR",
+          code: "invalid_channel_id",
           error: "channelId param should be a string",
         };
       }
@@ -21,6 +22,7 @@ export default defineEventHandler(
       if (response?.content?.chatChannelId === undefined) {
         return {
           status: "ERROR",
+          code: "no_chat_channel_id",
           error: "No chatChannelId in response",
         };
       }
@@ -34,6 +36,7 @@ export default defineEventHandler(
       console.error(error);
       return {
         status: "ERROR",
+        code: "internal_server_error",
         error: "Internal Server Error",
       };
     }
