@@ -9,6 +9,7 @@ import type {
   ChzzkAuthLoginResponse,
 } from "~/lib/interfaces";
 import { useSocketIo } from "../useSocketIo";
+import { useSharedConnection } from "../useSharedConnection";
 
 interface ChzzkMessage {
   chatItem: ChzzkChatSessionMessage;
@@ -82,6 +83,20 @@ interface ChzzkDonationSessionMessage {
   };
 }
 
+type ChzzkSessionMessageData =
+  | {
+      type: "SYSTEM";
+      message: ChzzkSystemSessionMessage;
+    }
+  | {
+      type: "CHAT";
+      message: ChzzkChatSessionMessage;
+    }
+  | {
+      type: "DONATION";
+      message: ChzzkDonationSessionMessage;
+    };
+
 function handleChzzkEmojis(message: ChzzkChatSessionMessage) {
   const emojis: { [key: string]: string } = {};
   const originalEmojis =
@@ -138,6 +153,60 @@ export function useChzzk(options: {
     });
   });
 
+  const sharedChannelName = computed(() => {
+    return `chaosrat-chzzk-${chatOptions.value.chzzkChannelId}`;
+  });
+
+  const { isLeader, sendData } = useSharedConnection<ChzzkSessionMessageData>(
+    sharedChannelName,
+    {
+      onBecomeLeader: () => {
+        initChat();
+      },
+      onLoseLeader: () => {
+        socketClose();
+      },
+      onData: (data) => {
+        if (data.type === "SYSTEM") {
+          if (data.message.type === "connected") {
+            console.log("Chzzk Connected", data.message);
+            sessionKey.value = data.message.data.sessionKey;
+          } else if (data.message.type === "subscribed") {
+            console.log("Chzzk Subscribed", data.message);
+          } else if (data.message.type === "unsubscribed") {
+            console.log("Chzzk Unsubscribed", data.message);
+          } else if (data.message.type === "revoked") {
+            console.log("Chzzk Revoked", data.message);
+          } else {
+            console.log("Chzzk Unknown System Message", data.message);
+          }
+        } else if (data.type === "CHAT") {
+          console.log("Chzzk CHAT", data.message);
+          if (options.onBroadcasterMessage) {
+            if (data.message.senderChannelId === data.message.channelId) {
+              if (options.onBroadcasterMessage(data.message.content)) {
+                return;
+              }
+            }
+          }
+          messages.value.push({
+            chatItem: data.message,
+            timestamp: new Date().getTime(),
+          });
+          if (chatOptions.value.maxChatSize !== undefined) {
+            if (messages.value.length > chatOptions.value.maxChatSize) {
+              messages.value = messages.value.slice(
+                messages.value.length - chatOptions.value.maxChatSize
+              );
+            }
+          }
+        } else if ((data.type = "DONATION")) {
+          console.log("Chzzk DONATION", data.message);
+        }
+      },
+    }
+  );
+
   const socketUrl = ref<string | undefined>(undefined);
   async function updateSocketUrl() {
     try {
@@ -185,51 +254,41 @@ export function useChzzk(options: {
     },
     onDisconnected: () => {
       console.log("Disconnected from Chzzk");
-      new Promise((resolve) => setTimeout(resolve, 1000)).then(initChat);
+      if (isLeader.value) {
+        new Promise((resolve) => setTimeout(resolve, 500)).then(
+          updateSocketUrl
+        );
+      }
     },
     events: {
       SYSTEM: (messageString: string) => {
         const message = JSON.parse(messageString) as ChzzkSystemSessionMessage;
-        if (message.type === "connected") {
-          console.log("Chzzk Connected", message);
-          sessionKey.value = message.data.sessionKey;
-        } else if (message.type === "subscribed") {
-          console.log("Chzzk Subscribed", message);
-        } else if (message.type === "unsubscribed") {
-          console.log("Chzzk Unsubscribed", message);
-        } else if (message.type === "revoked") {
-          console.log("Chzzk Revoked", message);
-        } else {
-          console.log("Chzzk Unknown System Message", message);
+        if (isLeader.value) {
+          sendData({
+            type: "SYSTEM",
+            message,
+          });
         }
       },
       CHAT: (messageString: string) => {
         const message = JSON.parse(messageString) as ChzzkChatSessionMessage;
-        console.log("Chzzk CHAT", message);
-        if (options.onBroadcasterMessage) {
-          if (message.senderChannelId === message.channelId) {
-            if (options.onBroadcasterMessage(message.content)) {
-              return;
-            }
-          }
-        }
-        messages.value.push({
-          chatItem: message,
-          timestamp: new Date().getTime(),
-        });
-        if (chatOptions.value.maxChatSize !== undefined) {
-          if (messages.value.length > chatOptions.value.maxChatSize) {
-            messages.value = messages.value.slice(
-              messages.value.length - chatOptions.value.maxChatSize
-            );
-          }
+        if (isLeader.value) {
+          sendData({
+            type: "CHAT",
+            message,
+          });
         }
       },
       DONATION: (messageString: string) => {
         const message = JSON.parse(
           messageString
         ) as ChzzkDonationSessionMessage;
-        console.log("Chzzk DONATION", message);
+        if (isLeader.value) {
+          sendData({
+            type: "DONATION",
+            message,
+          });
+        }
       },
     },
   });
@@ -321,12 +380,43 @@ export function useChzzk(options: {
     errors.value = errors.value.filter((error) => error.id !== "chzzk-login");
   }
 
+  function showCcidMismatchError() {
+    if (errors.value.find((error) => error.id === "chzzk-ccid-mismatch")) {
+      return;
+    }
+    errors.value.push({
+      id: "chzzk-ccid-mismatch",
+      platform: "chzzk",
+      message:
+        "로그인한 치지직 계정과 채널 ID가 일치하지 않습니다. 채널 ID를 변경하거나 이 메시지를 클릭해 로그아웃하세요.",
+      onClick: async () => {
+        try {
+          await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout");
+          window.location.reload();
+        } catch (e) {
+          console.error("Failed to logout from Chzzk:", e);
+        }
+      },
+    });
+  }
+
+  function hideCcidMismatchError() {
+    errors.value = errors.value.filter(
+      (error) => error.id !== "chzzk-ccid-mismatch"
+    );
+  }
+
   watch(
     () => ({
       socketUrl: socketUrl.value,
+      isLeader: isLeader.value,
     }),
     (val, oldVal) => {
-      if (val.socketUrl && val.socketUrl !== oldVal?.socketUrl) {
+      if (
+        val.socketUrl &&
+        val.socketUrl !== oldVal?.socketUrl &&
+        val.isLeader
+      ) {
         initChat();
       }
     },
@@ -355,6 +445,7 @@ export function useChzzk(options: {
     async (val) => {
       if (!val.chzzkChannelId) {
         hideLoginError();
+        hideCcidMismatchError();
         return;
       }
       try {
@@ -362,6 +453,12 @@ export function useChzzk(options: {
           "/api/chzzk/me"
         );
         if (response.status === "OK") {
+          if (response.channelId !== val.chzzkChannelId) {
+            showCcidMismatchError();
+            return;
+          } else {
+            hideCcidMismatchError();
+          }
           hideLoginError();
           return;
         }

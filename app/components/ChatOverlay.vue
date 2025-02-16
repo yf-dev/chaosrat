@@ -192,7 +192,11 @@ const processedChatItems = computed(() => {
 
 <style scoped>
 .error-box {
-  margin: 0.5rem;
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  padding: 0.5rem;
+  flex-direction: column-reverse;
 }
 .error-item {
   padding: 1rem;
