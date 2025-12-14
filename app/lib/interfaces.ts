@@ -19,7 +19,9 @@ export type ChatTheme =
   | "colorful"
   | "video-master"
   | "simple"
-  | "pure";
+  | "pure"
+  | "cute-left"
+  | "cute-right";
 export type SoundEffectType =
   | "none"
   | "beep"

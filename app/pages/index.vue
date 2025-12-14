@@ -340,6 +340,8 @@ const themeOptions: {
   { value: "pure", label: "Pure" },
   { value: "colorful", label: "Colorful" },
   { value: "video-master", label: "Video Master" },
+  { value: "cute-left", label: "Cute Left" },
+  { value: "cute-right", label: "Cute Right" },
 ];
 const soundEffectTypeOptions: {
   value: SoundEffectType;

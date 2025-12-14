@@ -26,6 +26,8 @@ import {
   VideoMasterChatList,
   SimpleChatList,
   PureChatList,
+  CuteChatLeftList,
+  CuteChatRightList,
 } from "#components";
 import { encodeFormatString } from "~/lib/utils";
 import type { ChatItem } from "~/lib/interfaces";
@@ -43,6 +45,10 @@ const chatListComponent = computed(() => {
       return SimpleChatList;
     case "pure":
       return PureChatList;
+    case "cute-left":
+      return CuteChatLeftList;
+    case "cute-right":
+      return CuteChatRightList;
     case "default":
     default:
       return DefaultChatList;

@@ -41,6 +41,8 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       case "video-master":
       case "simple":
       case "pure":
+      case "cute-left":
+      case "cute-right":
       case "default":
         return themeValue;
       default:
