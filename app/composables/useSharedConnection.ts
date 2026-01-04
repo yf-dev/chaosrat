@@ -12,7 +12,17 @@ interface Heartbeat {
   from: string;
 }
 
-type Message<T> = Data<T> | Heartbeat;
+interface Ping {
+  type: "ping";
+  from: string;
+}
+
+interface Pong {
+  type: "pong";
+  from: string;
+}
+
+type Message<T> = Data<T> | Heartbeat | Ping | Pong;
 
 export interface SharedConnectionOptions<T> {
   /**
@@ -46,12 +56,13 @@ export function useSharedConnection<T>(
   const uuid = ref<string>(crypto.randomUUID());
   const isLeader = ref(false);
   const isClosed = ref(false);
-  const lastHeartbeat = ref(Date.now());
+  const lastHeartbeat = ref<number | null>(null);
   let electionTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Constants
   const heartbeatInterval = 2000;
   const electionTimeout = 3000 + Math.random() * 1000; // 3000ms ~ 4000ms
+  const pingTimeout = 500; // 500ms for fast leader detection
 
   // Timer management
   function clearElectionTimer() {
@@ -68,6 +79,7 @@ export function useSharedConnection<T>(
 
   // Leader election
   function shouldElectLeader() {
+    if (lastHeartbeat.value === null) return true;
     return Date.now() - lastHeartbeat.value > electionTimeout;
   }
 
@@ -83,13 +95,14 @@ export function useSharedConnection<T>(
     if (!isLeader.value) return;
     console.log("Losing leader");
     isLeader.value = false;
-    lastHeartbeat.value = Date.now();
+    lastHeartbeat.value = null;
     startElectionTimer();
     onLoseLeader?.();
   }
 
   function checkLeader() {
     if (isClosed.value || !channel.value) return;
+    console.log("Checking leader");
     if (shouldElectLeader()) {
       becomeLeader();
     }
@@ -101,9 +114,8 @@ export function useSharedConnection<T>(
       loseLeader();
     }
     clearElectionTimer();
-    lastHeartbeat.value = Date.now();
+    lastHeartbeat.value = null;
     isClosed.value = false;
-    startElectionTimer();
   }
 
   // Message handling
@@ -119,6 +131,21 @@ export function useSharedConnection<T>(
         } else if (msg.from < uuid.value) {
           // Other leader has smaller UUID, yield leadership
           loseLeader();
+        }
+        break;
+      case "ping":
+        console.log("ping received", msg);
+        // Only leader responds to ping
+        if (isLeader.value) {
+          sendPong();
+        }
+        break;
+      case "pong":
+        console.log("pong received", msg);
+        // Leader exists, update heartbeat and reset election timer
+        if (!isLeader.value) {
+          lastHeartbeat.value = Date.now();
+          startElectionTimer();
         }
         break;
       case "data":
@@ -147,6 +174,69 @@ export function useSharedConnection<T>(
   function sendHeartbeat() {
     console.log("sendHeartbeat");
     post({ type: "heartbeat", from: uuid.value });
+  }
+
+  function sendPing() {
+    console.log("sendPing");
+    post({ type: "ping", from: uuid.value });
+  }
+
+  function sendPong() {
+    console.log("sendPong");
+    post({ type: "pong", from: uuid.value });
+  }
+
+  /**
+   * Check if a leader exists by sending a ping and waiting for pong
+   * @returns Promise that resolves to true if leader exists, false otherwise
+   */
+  function checkLeaderExists(): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (isClosed.value || !channel.value) {
+        resolve(false);
+        return;
+      }
+
+      let resolved = false;
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          resolve(false);
+        }
+      }, pingTimeout);
+
+      const handlePong = (e: MessageEvent) => {
+        const msg = e.data as Message<T>;
+        if (msg.type === "pong" && !resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          resolve(true);
+        }
+      };
+
+      channel.value.addEventListener("message", handlePong);
+
+      // Clean up listener after timeout
+      setTimeout(() => {
+        channel.value?.removeEventListener("message", handlePong);
+      }, pingTimeout + 100);
+
+      sendPing();
+    });
+  }
+
+  /**
+   * Fast leader election using ping/pong mechanism
+   * If no leader responds within pingTimeout, become leader immediately
+   */
+  async function fastElection() {
+    if (isClosed.value || !channel.value) return;
+
+    const leaderExists = await checkLeaderExists();
+    if (!leaderExists && !isLeader.value) {
+      console.log("No leader found via ping, becoming leader");
+      becomeLeader();
+    }
   }
 
   function sendData(data: T) {
@@ -197,6 +287,9 @@ export function useSharedConnection<T>(
           },
           { passive: true }
         );
+
+        // Fast leader detection on channel creation
+        fastElection();
       }
     },
     { immediate: true }
