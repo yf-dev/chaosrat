@@ -1,28 +1,9 @@
 import { ref, watch, onBeforeUnmount } from "vue";
-import { useEventListener, useTimeoutPoll } from "@vueuse/core";
-
-interface Data<T> {
-  type: "data";
-  from: string;
-  data: T;
-}
-
-interface Heartbeat {
-  type: "heartbeat";
-  from: string;
-}
-
-interface Ping {
-  type: "ping";
-  from: string;
-}
-
-interface Pong {
-  type: "pong";
-  from: string;
-}
-
-type Message<T> = Data<T> | Heartbeat | Ping | Pong;
+import {
+  BroadcastChannel,
+  createLeaderElection,
+  type LeaderElector,
+} from "broadcast-channel";
 
 export interface SharedConnectionOptions<T> {
   /**
@@ -52,253 +33,95 @@ export function useSharedConnection<T>(
   const { onData, onBecomeLeader, onLoseLeader } = options;
 
   // State
-  const channel = ref<BroadcastChannel | undefined>(undefined);
-  const uuid = ref<string>(crypto.randomUUID());
+  const channel = ref<BroadcastChannel<T> | undefined>(undefined);
+  const elector = ref<LeaderElector | undefined>(undefined);
   const isLeader = ref(false);
   const isClosed = ref(false);
-  const lastHeartbeat = ref<number | null>(null);
-  let electionTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Constants
-  const heartbeatInterval = 2000;
-  const electionTimeout = 3000 + Math.random() * 1000; // 3000ms ~ 4000ms
-  const pingTimeout = 500; // 500ms for fast leader detection
-
-  // Timer management
-  function clearElectionTimer() {
-    if (electionTimer) {
-      clearTimeout(electionTimer);
-      electionTimer = null;
+  // Cleanup current channel and elector
+  async function cleanup() {
+    if (elector.value) {
+      await elector.value.die();
+      elector.value = undefined;
     }
-  }
-
-  function startElectionTimer() {
-    clearElectionTimer();
-    electionTimer = setTimeout(checkLeader, electionTimeout);
-  }
-
-  // Leader election
-  function shouldElectLeader() {
-    if (lastHeartbeat.value === null) return true;
-    return Date.now() - lastHeartbeat.value > electionTimeout;
-  }
-
-  function becomeLeader() {
-    if (isLeader.value) return;
-    console.log("Becoming leader");
-    isLeader.value = true;
-    sendHeartbeat();
-    onBecomeLeader?.();
-  }
-
-  function loseLeader() {
-    if (!isLeader.value) return;
-    console.log("Losing leader");
-    isLeader.value = false;
-    lastHeartbeat.value = null;
-    startElectionTimer();
-    onLoseLeader?.();
-  }
-
-  function checkLeader() {
-    if (isClosed.value || !channel.value) return;
-    console.log("Checking leader");
-    if (shouldElectLeader()) {
-      becomeLeader();
-    }
-  }
-
-  // Reset state when channel changes
-  function resetState() {
-    if (isLeader.value) {
-      loseLeader();
-    }
-    clearElectionTimer();
-    lastHeartbeat.value = null;
-    isClosed.value = false;
-  }
-
-  // Message handling
-  function handleChannelMessage(msg: Message<T>) {
-    if (!msg || isClosed.value) return;
-
-    switch (msg.type) {
-      case "heartbeat":
-        console.log("heartbeat", msg);
-        if (!isLeader.value) {
-          lastHeartbeat.value = Date.now();
-          startElectionTimer();
-        } else if (msg.from < uuid.value) {
-          // Other leader has smaller UUID, yield leadership
-          loseLeader();
-        }
-        break;
-      case "ping":
-        console.log("ping received", msg);
-        // Only leader responds to ping
-        if (isLeader.value) {
-          sendPong();
-        }
-        break;
-      case "pong":
-        console.log("pong received", msg);
-        // Leader exists, update heartbeat and reset election timer
-        if (!isLeader.value) {
-          lastHeartbeat.value = Date.now();
-          startElectionTimer();
-        }
-        break;
-      case "data":
-        console.log("data", msg);
-        onData(msg.data);
-        break;
-    }
-  }
-
-  // Channel management
-  const post = (data: Message<T>) => {
-    if (channel.value && !isClosed.value) {
-      channel.value.postMessage(data);
-    }
-  };
-
-  const close = () => {
     if (channel.value) {
-      channel.value.close();
+      await channel.value.close();
       channel.value = undefined;
     }
-    clearElectionTimer();
+  }
+
+  // Close function for external use
+  const close = async () => {
+    await cleanup();
     isClosed.value = true;
   };
 
-  function sendHeartbeat() {
-    console.log("sendHeartbeat");
-    post({ type: "heartbeat", from: uuid.value });
-  }
-
-  function sendPing() {
-    console.log("sendPing");
-    post({ type: "ping", from: uuid.value });
-  }
-
-  function sendPong() {
-    console.log("sendPong");
-    post({ type: "pong", from: uuid.value });
-  }
-
-  /**
-   * Check if a leader exists by sending a ping and waiting for pong
-   * @returns Promise that resolves to true if leader exists, false otherwise
-   */
-  function checkLeaderExists(): Promise<boolean> {
-    return new Promise((resolve) => {
-      if (isClosed.value || !channel.value) {
-        resolve(false);
-        return;
-      }
-
-      let resolved = false;
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          resolve(false);
-        }
-      }, pingTimeout);
-
-      const handlePong = (e: MessageEvent) => {
-        const msg = e.data as Message<T>;
-        if (msg.type === "pong" && !resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          resolve(true);
-        }
-      };
-
-      channel.value.addEventListener("message", handlePong);
-
-      // Clean up listener after timeout
-      setTimeout(() => {
-        channel.value?.removeEventListener("message", handlePong);
-      }, pingTimeout + 100);
-
-      sendPing();
-    });
-  }
-
-  /**
-   * Fast leader election using ping/pong mechanism
-   * If no leader responds within pingTimeout, become leader immediately
-   */
-  async function fastElection() {
-    if (isClosed.value || !channel.value) return;
-
-    const leaderExists = await checkLeaderExists();
-    if (!leaderExists && !isLeader.value) {
-      console.log("No leader found via ping, becoming leader");
-      becomeLeader();
-    }
-  }
-
+  // Send data to all tabs
   function sendData(data: T) {
     console.log("sendData", data);
-    post({ type: "data", from: uuid.value, data });
+    if (channel.value && !isClosed.value) {
+      channel.value.postMessage(data);
+    }
+    // Also handle locally
     onData(data);
   }
-
-  // Heartbeat interval
-  const { pause: pauseHeartbeatInterval } = useTimeoutPoll(
-    () => {
-      if (isLeader.value && !isClosed.value) {
-        sendHeartbeat();
-      }
-    },
-    heartbeatInterval,
-    { immediate: true }
-  );
 
   // Watch channel name changes
   watch(
     () => channelNameRef.value,
-    (newChannelName) => {
-      // Close previous channel
-      if (channel.value) {
-        channel.value.close();
-        channel.value = undefined;
-      }
+    async (newChannelName) => {
+      // Close previous channel and elector
+      await cleanup();
+
+      // Reset state
+      isClosed.value = false;
+      isLeader.value = false;
 
       // Open new channel
       if (newChannelName) {
         console.log("Creating channel", newChannelName);
-        resetState();
-        channel.value = new BroadcastChannel(newChannelName);
 
-        useEventListener(
-          channel,
-          "message",
-          (e: MessageEvent) => handleChannelMessage(e.data as Message<T>),
-          { passive: true }
-        );
+        // Create broadcast channel
+        channel.value = new BroadcastChannel<T>(newChannelName);
 
-        useEventListener(
-          channel,
-          "close",
-          () => {
-            isClosed.value = true;
-          },
-          { passive: true }
-        );
+        // Set up message handler
+        channel.value.onmessage = (msg: T) => {
+          console.log("data", msg);
+          onData(msg);
+        };
 
-        // Fast leader detection on channel creation
-        fastElection();
+        // Create leader elector
+        elector.value = createLeaderElection(channel.value, {
+          fallbackInterval: 2000, // How often renegotiation for leader occur
+          responseTime: 1000, // How long instances have to respond
+        });
+
+        // Handle duplicate leaders
+        elector.value.onduplicate = () => {
+          console.warn("Duplicate leaders detected!");
+        };
+
+        // Wait for leadership
+        elector.value.awaitLeadership().then(() => {
+          console.log("Becoming leader");
+          isLeader.value = true;
+          onBecomeLeader?.();
+        });
+
+        // Note: broadcast-channel doesn't have a built-in callback for losing leadership
+        // Leadership is typically lost when the tab/process closes
+        // If we need to handle explicit leadership loss, we can use elector.die()
       }
     },
     { immediate: true }
   );
 
-  // Cleanup
-  onBeforeUnmount(() => {
-    close();
-    pauseHeartbeatInterval();
+  // Cleanup on unmount
+  onBeforeUnmount(async () => {
+    if (isLeader.value) {
+      onLoseLeader?.();
+    }
+    await close();
   });
 
   return { isLeader, isClosed, sendData, close };
