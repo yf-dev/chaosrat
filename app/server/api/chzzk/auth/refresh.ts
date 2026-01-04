@@ -4,40 +4,12 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
   try {
     const config = useRuntimeConfig(event);
 
-    const accessToken = getCookie(event, "chzzk_access_token");
-    if (!accessToken) {
-      return {
-        status: "ERROR",
-        code: "not_logged_in",
-        error: "User is not logged in",
-      };
-    }
-
     const refreshToken = getCookie(event, "chzzk_refresh_token");
     if (!refreshToken) {
       return {
         status: "ERROR",
         code: "no_refresh_token",
         error: "No refresh token found",
-      };
-    }
-
-    const tokenCreatedAt = getCookie(event, "chzzk_token_created_at");
-    if (!tokenCreatedAt) {
-      return {
-        status: "ERROR",
-        code: "no_token_created_at",
-        error: "No token created at found",
-      };
-    }
-
-    // if token is created in 24 hours, do not refresh
-    if (
-      new Date().getTime() - new Date(tokenCreatedAt).getTime() <
-      24 * 60 * 60 * 1000
-    ) {
-      return {
-        status: "OK",
       };
     }
 
@@ -123,6 +95,9 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
   } catch (error) {
     console.log("Chzzk auth/refresh Api Error");
     console.error(error);
+    // if (error && typeof error === "object" && "data" in error) {
+    //   console.log("Chzzk API Error Data:", error.data);
+    // }
     return {
       status: "ERROR",
       code: "internal_server_error",

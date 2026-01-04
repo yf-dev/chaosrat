@@ -154,6 +154,7 @@ export function useChzzk(options: {
   });
 
   const sharedChannelName = computed(() => {
+    if (!chatOptions.value.chzzkChannelId) return undefined;
     return `chaosrat-chzzk-${chatOptions.value.chzzkChannelId}`;
   });
 
@@ -200,7 +201,7 @@ export function useChzzk(options: {
               );
             }
           }
-        } else if ((data.type = "DONATION")) {
+        } else if (data.type === "DONATION") {
           console.log("Chzzk DONATION", data.message);
         }
       },
@@ -233,9 +234,12 @@ export function useChzzk(options: {
   useTimeoutPoll(updateSocketUrl, 1000 * 60 * 60 * 12, { immediate: true }); // 12 hours interval
 
   async function refreshToken() {
-    await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
+    const result = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
+    if (result.status === "OK") {
+      await updateSocketUrl();
+    }
   }
-  useTimeoutPoll(refreshToken, 1000 * 60 * 60 * 24 * 3, { immediate: true }); // 3 days interval
+  useTimeoutPoll(refreshToken, 1000 * 60 * 60 * 24 * 3, { immediate: false }); // 3 days interval
 
   const {
     status: socketStatus,
@@ -426,9 +430,11 @@ export function useChzzk(options: {
   watch(
     () => ({
       sessionKey: sessionKey.value,
+      isLeader: isLeader.value,
     }),
     async (val, oldVal) => {
-      if (oldVal?.sessionKey) {
+      if (!val.isLeader) return;
+      if (oldVal?.sessionKey && oldVal.sessionKey !== val.sessionKey) {
         await unsubscribeChat(oldVal.sessionKey);
       }
       if (val.sessionKey) {
@@ -448,29 +454,46 @@ export function useChzzk(options: {
         hideCcidMismatchError();
         return;
       }
-      try {
+
+      async function checkMe() {
         const response = await $fetch<ChzzkMeResponse | ApiError>(
           "/api/chzzk/me"
         );
         if (response.status === "OK") {
           if (response.channelId !== val.chzzkChannelId) {
             showCcidMismatchError();
-            return;
+            return true;
           } else {
             hideCcidMismatchError();
           }
           hideLoginError();
-          return;
+          return true;
         }
-      } catch (e) {
-        // ignore
+        return false;
       }
+
+      try {
+        if (await checkMe()) return;
+      } catch (e) {
+        // First attempt failed, try refreshing token
+      }
+
+      try {
+        await refreshToken();
+        if (await checkMe()) return;
+      } catch (e) {
+        // Refresh failed
+      }
+
       showLoginError();
     },
     { immediate: true }
   );
 
-  onBeforeUnmount(() => {
+  onBeforeUnmount(async () => {
+    if (isLeader.value && sessionKey.value) {
+      await unsubscribeChat(sessionKey.value);
+    }
     socketClose();
   });
 

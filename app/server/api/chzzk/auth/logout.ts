@@ -60,6 +60,9 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
   } catch (error) {
     console.log("Chzzk auth/logout Api Error");
     console.error(error);
+    // if (error && typeof error === "object" && "data" in error) {
+    //   console.log("Chzzk API Error Data:", error.data);
+    // }
     return {
       status: "ERROR",
       code: "internal_server_error",
