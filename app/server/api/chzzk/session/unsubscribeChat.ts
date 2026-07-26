@@ -1,4 +1,4 @@
-import { ApiOk, ApiError } from "~/lib/interfaces";
+import type { ApiOk, ApiError } from "~/lib/interfaces";
 
 export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
   try {
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
         method: "POST",
         query: { sessionKey: body.sessionKey },
         headers: { Authorization: `Bearer ${accessToken}` },
-      }
+      },
     );
 
     if (response.code != 200) {

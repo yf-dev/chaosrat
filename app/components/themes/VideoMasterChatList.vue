@@ -15,13 +15,13 @@
               :style="{
                 backgroundColor: hashToColor(hashCode(chat.nickname), 100, 70),
               }"
-            ></div>
+            />
           </div>
           <IconChevronDown
             class="chevron"
             color="#999999"
             :size="20"
-            :strokeWidth="1"
+            :stroke-width="1"
           />
           <div
             v-if="Object.keys(chat.extra.badges ?? {}).length > 0"
@@ -38,12 +38,12 @@
             {{ chat.nickname }}
           </div>
         </div>
-        <div class="message" v-html="messageHtml(chat)"></div>
+        <div class="message" v-html="messageHtml(chat)" />
       </div>
     </div>
     <div class="header">
       <div class="cell">
-        <IconChevronUp color="#999999" :size="20" :strokeWidth="1" />
+        <IconChevronUp color="#999999" :size="20" :stroke-width="1" />
       </div>
       <div class="cell">Name</div>
     </div>

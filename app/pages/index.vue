@@ -33,12 +33,12 @@
         </div>
         <div class="col">
           <input
+            id="twitchChannel"
             type="text"
             class="form-control"
-            id="twitchChannel"
-            @input="twitchChannel = ($event.target as HTMLInputElement).value"
             :value="twitchChannel"
             placeholder="sleeping_ce"
+            @input="twitchChannel = ($event.target as HTMLInputElement).value"
           />
           <p>
             트위치 채널 페이지 URL의 뒤쪽에서 확인할 수 있습니다.<br />
@@ -52,12 +52,12 @@
         </div>
         <div class="col">
           <input
+            id="youtubeHandle"
             type="text"
             class="form-control"
-            id="youtubeHandle"
-            @input="youtubeHandle = ($event.target as HTMLInputElement).value"
             :value="youtubeHandle"
             placeholder="@sleeping.c.elegans"
+            @input="youtubeHandle = ($event.target as HTMLInputElement).value"
           />
           <p>
             유튜브 채널 페이지 URL의 뒤쪽에서 확인할 수 있습니다.<br />
@@ -71,12 +71,12 @@
         </div>
         <div class="col">
           <input
+            id="kickChannel"
             type="text"
             class="form-control"
-            id="kickChannel"
-            @input="kickChannel = ($event.target as HTMLInputElement).value"
             :value="kickChannel"
             placeholder="sleeping-c-elegans"
+            @input="kickChannel = ($event.target as HTMLInputElement).value"
           />
           <p>
             Kick 채널 페이지 URL의 뒤쪽에서 확인할 수 있습니다.<br />
@@ -90,12 +90,12 @@
         </div>
         <div class="col">
           <select
-            class="form-control"
             id="theme"
+            class="form-control"
+            :value="theme"
             @change="
               theme = ($event.target as HTMLSelectElement).value as ChatTheme
             "
-            :value="theme"
           >
             <option
               v-for="option in themeOptions"
@@ -113,17 +113,17 @@
         </div>
         <div class="col">
           <input
+            id="maxChatSize"
             type="number"
             class="form-control"
-            id="maxChatSize"
+            :value="maxChatSize"
             @input="
               maxChatSize = parseIntOrDefault(
                 ($event.target as HTMLInputElement).value,
                 10,
-                100
+                100,
               )
             "
-            :value="maxChatSize"
           />
         </div>
       </div>
@@ -133,13 +133,13 @@
         </div>
         <div class="col">
           <input
+            id="hiddenUsernameRegex"
             type="text"
             class="form-control"
-            id="hiddenUsernameRegex"
+            :value="hiddenUsernameRegex"
             @input="
               hiddenUsernameRegex = ($event.target as HTMLInputElement).value
             "
-            :value="hiddenUsernameRegex"
           />
           <p>정규표현식(RegExp)으로 입력하세요.</p>
         </div>
@@ -150,13 +150,13 @@
         </div>
         <div class="col">
           <input
+            id="hiddenMessageRegex"
             type="text"
             class="form-control"
-            id="hiddenMessageRegex"
+            :value="hiddenMessageRegex"
             @input="
               hiddenMessageRegex = ($event.target as HTMLInputElement).value
             "
-            :value="hiddenMessageRegex"
           />
           <p>정규표현식(RegExp)으로 입력하세요.</p>
         </div>
@@ -168,13 +168,13 @@
         <div class="col">
           <div>
             <select
-              class="form-control"
               id="soundEffectType"
+              class="form-control"
+              :value="soundEffectType"
               @change="
                 soundEffectType = ($event.target as HTMLSelectElement)
                   .value as SoundEffectType
               "
-              :value="soundEffectType"
             >
               <option
                 v-for="option in soundEffectTypeOptions"
@@ -187,14 +187,14 @@
           </div>
           <div v-if="soundEffectType === 'custom'">
             <input
+              id="soundEffectCustomUrl"
               type="text"
               class="form-control"
-              id="soundEffectCustomUrl"
+              :value="soundEffectCustomUrl"
+              placeholder="https://example.com/sound-effect.mp3"
               @input="
                 soundEffectCustomUrl = ($event.target as HTMLInputElement).value
               "
-              :value="soundEffectCustomUrl"
-              placeholder="https://example.com/sound-effect.mp3"
             />
           </div>
         </div>
@@ -205,20 +205,20 @@
         </div>
         <div class="col">
           <input
+            id="soundEffectVolume"
             type="range"
             min="0"
             max="100"
             class="form-control"
-            id="soundEffectVolume"
+            :value="soundEffectVolume"
+            :disabled="soundEffectType === 'none'"
             @input="
               soundEffectVolume = parseIntOrDefault(
                 ($event.target as HTMLInputElement).value,
                 10,
-                100
+                100,
               )
             "
-            :value="soundEffectVolume"
-            :disabled="soundEffectType === 'none'"
           />
         </div>
         <div class="col-1">
@@ -234,15 +234,15 @@
         <div class="col">
           <div>
             <input
+              id="isUseOpenDcconSelector"
               type="checkbox"
               class="form-check-input"
-              id="isUseOpenDcconSelector"
+              :checked="isUseOpenDcconSelector"
+              :disabled="!twitchChannel"
               @change="
                 isUseOpenDcconSelector = ($event.target as HTMLInputElement)
                   .checked
               "
-              :checked="isUseOpenDcconSelector"
-              :disabled="!twitchChannel"
             />
             <label class="form-check-label" for="isUseOpenDcconSelector">
               Open Dccon Selector에서 스티커 불러오기
@@ -253,13 +253,13 @@
           </div>
           <div>
             <input
+              id="isHidePlatformIcon"
               type="checkbox"
               class="form-check-input"
-              id="isHidePlatformIcon"
+              :checked="isHidePlatformIcon"
               @change="
                 isHidePlatformIcon = ($event.target as HTMLInputElement).checked
               "
-              :checked="isHidePlatformIcon"
             />
             <label class="form-check-label" for="isHidePlatformIcon">
               플랫폼 아이콘 숨기기
@@ -275,9 +275,9 @@
         </div>
         <div class="col input-with-button">
           <input
+            id="chatOverlayUrl"
             type="text"
             readonly
-            id="chatOverlayUrl"
             :value="chatOverlayUrl"
           />
           <button
@@ -303,7 +303,7 @@
           width="100%"
           frameborder="0"
           scrolling="no"
-        ></iframe>
+        />
       </ClientOnly>
     </div>
     <footer class="global-footer row">
@@ -406,13 +406,13 @@ const chatOverlayUrl = computed(() => {
   if (hiddenUsernameRegex.value) {
     url.searchParams.set(
       "hiddenUsernameRegex",
-      encodeUrlSafeBase64(hiddenUsernameRegex.value)
+      encodeUrlSafeBase64(hiddenUsernameRegex.value),
     );
   }
   if (hiddenMessageRegex.value) {
     url.searchParams.set(
       "hiddenMessageRegex",
-      encodeUrlSafeBase64(hiddenMessageRegex.value)
+      encodeUrlSafeBase64(hiddenMessageRegex.value),
     );
   }
   if (soundEffectType.value !== "none") {
@@ -423,7 +423,7 @@ const chatOverlayUrl = computed(() => {
     if (soundEffectVolume.value !== 100) {
       url.searchParams.set(
         "soundEffectVolume",
-        soundEffectVolume.value.toString()
+        soundEffectVolume.value.toString(),
       );
     }
   }
@@ -436,7 +436,7 @@ const chatOverlayUrl = computed(() => {
 const { copy: copyChatOverlayUrl, copied: copiedChatOverlayUrl } = useClipboard(
   {
     source: chatOverlayUrl,
-  }
+  },
 );
 
 async function loginToChzzk() {
@@ -445,7 +445,7 @@ async function loginToChzzk() {
       "/api/chzzk/auth/login",
       {
         query: { redirectTo: `${requestUrl.pathname}${requestUrl.search}` },
-      }
+      },
     );
     if (response.status === "OK") {
       window.location.href = response.authUrl;
@@ -507,10 +507,11 @@ body.index {
   --grid-gutter: 2rem;
   --font-size: 1.6rem;
   --font-color: #333333;
-  --font-family-sans: "Pretendard Variable", Pretendard, -apple-system,
-    BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI",
-    "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji",
-    "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  --font-family-sans:
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", sans-serif;
   --font-family-mono: monaco, "Consolas", "Lucida Console", monospace;
 }
 </style>

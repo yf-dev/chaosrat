@@ -97,7 +97,7 @@ export function useYoutubeLive(options: {
 
     // Emit at end of observation chat.
     // reason: string?
-    liveChat.on("end", (reason) => {
+    liveChat.on("end", (_reason) => {
       console.log(`Disconnected from Youtube Live ${handleValue}`);
       new Promise((resolve) => setTimeout(resolve, 1000)).then(initChat);
     });
@@ -121,7 +121,7 @@ export function useYoutubeLive(options: {
       if (chatOptions.value.maxChatSize !== undefined) {
         if (messages.value.length > chatOptions.value.maxChatSize) {
           messages.value = messages.value.slice(
-            messages.value.length - chatOptions.value.maxChatSize
+            messages.value.length - chatOptions.value.maxChatSize,
           );
         }
       }
@@ -146,10 +146,10 @@ export function useYoutubeLive(options: {
     () => ({
       chatOptions: chatOptions.value,
     }),
-    async (val) => {
+    async (_val) => {
       await initChat();
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   onBeforeUnmount(async () => {
@@ -193,7 +193,7 @@ function replaceXhrOpen() {
     url: string | URL,
     async: boolean = true,
     user?: string | null,
-    password?: string | null
+    password?: string | null,
   ) {
     return original_function.call(
       this,
@@ -201,7 +201,7 @@ function replaceXhrOpen() {
       updateUrl(url),
       async,
       user,
-      password
+      password,
     );
   };
 }

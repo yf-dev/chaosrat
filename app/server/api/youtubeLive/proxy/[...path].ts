@@ -1,5 +1,5 @@
 import { defineEventHandler, proxyRequest } from "h3";
-import { ApiError } from "~/lib/interfaces";
+import type { ApiError } from "~/lib/interfaces";
 
 export default defineEventHandler(
   async (event): Promise<unknown | ApiError> => {
@@ -33,5 +33,5 @@ export default defineEventHandler(
         error: "Internal Server Error",
       };
     }
-  }
+  },
 );

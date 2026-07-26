@@ -1,4 +1,4 @@
-import { ChzzkMeResponse, ApiError } from "~/lib/interfaces";
+import type { ChzzkMeResponse, ApiError } from "~/lib/interfaces";
 
 interface ChzzkIdentity {
   channelId: string;
@@ -79,5 +79,5 @@ export default defineEventHandler(
         error: "Internal Server Error",
       };
     }
-  }
+  },
 );

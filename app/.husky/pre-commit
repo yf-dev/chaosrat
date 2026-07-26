@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+# Husky's own shim (.husky/_/h) always runs this file as `sh -e "$s"` — it
+# never honors the shebang above, so without this re-exec we'd silently run
+# under dash/POSIX sh instead of bash and lose `set -o pipefail`/`[[ ]]`
+# below (dash rejects both). Re-exec under real bash before using any
+# bash-only syntax.
+if [ -z "${BASH_VERSION:-}" ]; then
+  exec bash "$0" "$@"
+fi
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+if [[ "${TRACE-0}" == "1" ]]; then
+  set -o xtrace
+fi
+
+# Git invokes hooks with the working directory set to the repo root
+# (/project), but this is a subdirectory package (/project/app). cd relative
+# to this script's own location so the hook works from any clone path.
+cd "$(dirname "$0")/.."
+
+echo "==> [pre-commit] running lint-staged..."
+npx lint-staged
+
+# NOTE: this runs the test suite against the current working tree, not the
+# strict staged-only snapshot lint-staged normally provides. That's a
+# deliberate, accepted tradeoff (running vitest against a synthetic
+# staged-only checkout would be significantly more complex), not an oversight.
+echo "==> [pre-commit] running test suite..."
+npm run test

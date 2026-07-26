@@ -1,4 +1,8 @@
-import { TwitchBadgesResponse, ApiError, TwitchBadge } from "~/lib/interfaces";
+import type {
+  TwitchBadgesResponse,
+  ApiError,
+  TwitchBadge,
+} from "~/lib/interfaces";
 
 export default defineEventHandler(
   async (event): Promise<TwitchBadgesResponse | ApiError> => {
@@ -27,7 +31,7 @@ export default defineEventHandler(
         `https://id.twitch.tv/oauth2/token?client_id=${twitchClientId}&client_secret=${twitchClientSecret}&grant_type=client_credentials`,
         {
           method: "POST",
-        }
+        },
       );
 
       // get global badges
@@ -82,7 +86,7 @@ export default defineEventHandler(
               "Client-ID": twitchClientId,
               Authorization: `Bearer ${appAccessToken.access_token}`,
             },
-          }
+          },
         );
         if (channelBadges) {
           for (const badge of channelBadges.data) {
@@ -105,5 +109,5 @@ export default defineEventHandler(
         error: "Internal Server Error",
       };
     }
-  }
+  },
 );

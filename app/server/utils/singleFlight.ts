@@ -8,9 +8,7 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
-export function createSingleFlight<T>(
-  options: SingleFlightOptions
-): {
+export function createSingleFlight<T>(options: SingleFlightOptions): {
   run(key: string, fn: () => Promise<T>): Promise<T>;
   size(): number;
 } {
@@ -51,7 +49,7 @@ export function createSingleFlight<T>(
       (error) => {
         inFlight.delete(key);
         throw error;
-      }
+      },
     );
 
     inFlight.set(key, promise);

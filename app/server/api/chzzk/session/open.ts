@@ -1,4 +1,4 @@
-import { ChzzkSessionOpenResponse, ApiError } from "~/lib/interfaces";
+import type { ChzzkSessionOpenResponse, ApiError } from "~/lib/interfaces";
 
 export default defineEventHandler(
   async (event): Promise<ChzzkSessionOpenResponse | ApiError> => {
@@ -75,5 +75,5 @@ export default defineEventHandler(
         error: "Internal Server Error",
       };
     }
-  }
+  },
 );

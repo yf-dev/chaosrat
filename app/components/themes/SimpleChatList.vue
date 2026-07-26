@@ -16,7 +16,7 @@
           />
           <div class="nickname">
             <TextWithShadow
-              :shadowSize="0.1"
+              :shadow-size="0.1"
               :style="{
                 display: 'inline',
                 color: hashToColor(hashCode(chat.nickname), 100, 70),
@@ -28,9 +28,9 @@
         </div>
         <TextWithShadow
           class="message"
-          :shadowSize="0.1"
+          :shadow-size="0.1"
           v-html="messageHtml(chat)"
-        ></TextWithShadow>
+        />
       </div>
     </div>
   </div>

@@ -1,4 +1,4 @@
-import { ApiError, ApiOk } from "~/lib/interfaces";
+import type { ApiError, ApiOk } from "~/lib/interfaces";
 
 export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
   try {
@@ -10,7 +10,7 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
     try {
       // try to revoke the access token
       if (accessToken) {
-        const result = await $fetch<{
+        await $fetch<{
           code: number;
           message: string | null;
           content?: null;
@@ -25,7 +25,7 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
           },
         });
       }
-    } catch (error) {
+    } catch {
       // ignore the error
     }
 
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
           },
         });
       }
-    } catch (error) {
+    } catch {
       // ignore the error
     }
 

@@ -122,7 +122,7 @@ export interface ChzzkConnectionTimings {
 
 export function createChzzkConnection(
   deps: ChzzkConnectionDeps,
-  timings: ChzzkConnectionTimings = {}
+  timings: ChzzkConnectionTimings = {},
 ) {
   const retryBaseDelay = timings.retryBaseDelay ?? 1_000;
   const retryMaxDelay = timings.retryMaxDelay ?? 30_000;
@@ -147,7 +147,7 @@ export function createChzzkConnection(
     socket = undefined;
     try {
       current.close();
-    } catch (error) {
+    } catch {
       // Closing an already-dead socket must never crash the retry loop.
     }
   }
@@ -175,7 +175,7 @@ export function createChzzkConnection(
   async function safeFetchSessionUrl(): Promise<SessionUrlResult> {
     try {
       return await deps.fetchSessionUrl();
-    } catch (error) {
+    } catch {
       return { status: "ERROR" };
     }
   }
@@ -183,7 +183,7 @@ export function createChzzkConnection(
   async function safeRefreshToken(): Promise<boolean> {
     try {
       return await deps.refreshToken();
-    } catch (error) {
+    } catch {
       return false;
     }
   }
@@ -266,7 +266,7 @@ export function createChzzkConnection(
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
-    } catch (error) {
+    } catch {
       // Malformed payload: drop it, never throw out of a socket callback.
       return;
     }
@@ -294,7 +294,10 @@ export function createChzzkConnection(
     }
 
     if (type === "CHAT") {
-      deps.onEvent({ type: "CHAT", message: parsed as ChzzkChatSessionMessage });
+      deps.onEvent({
+        type: "CHAT",
+        message: parsed as ChzzkChatSessionMessage,
+      });
       return;
     }
 
@@ -306,10 +309,10 @@ export function createChzzkConnection(
 
   async function handleSubscribe(key: string) {
     const gen = generation;
-    let success = false;
+    let success: boolean;
     try {
       success = await deps.subscribeChat(key);
-    } catch (error) {
+    } catch {
       success = false;
     }
 
@@ -361,7 +364,7 @@ export function createChzzkConnection(
     if (keyToUnsubscribe) {
       try {
         await deps.unsubscribeChat(keyToUnsubscribe);
-      } catch (error) {
+      } catch {
         // Best-effort: the socket is going away regardless.
       }
     }

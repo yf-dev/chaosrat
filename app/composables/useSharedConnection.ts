@@ -10,6 +10,7 @@ import {
   BroadcastChannel,
   createLeaderElection,
   type LeaderElector,
+  type BroadcastChannelOptions,
 } from "broadcast-channel";
 
 export interface SharedConnectionOptions<T> {
@@ -50,7 +51,7 @@ export interface SharedConnectionOptions<T> {
 
 export function useSharedConnection<T>(
   channelName: MaybeRefOrGetter<string | undefined>,
-  options: SharedConnectionOptions<T>
+  options: SharedConnectionOptions<T>,
 ) {
   const channelNameRef = toRef(channelName);
   const { onData, onBecomeLeader, onLoseLeader, type, electionOptions } =
@@ -119,7 +120,10 @@ export function useSharedConnection<T>(
 
         // Create broadcast channel
         channel.value = new BroadcastChannel<T>(newChannelName, {
-          type: type as any,
+          // `broadcast-channel` doesn't export its `MethodType` union, so
+          // pull the type off the (exported) options type it belongs to
+          // instead of resorting to `any`.
+          type: type as BroadcastChannelOptions["type"],
         });
 
         // Set up message handler
@@ -166,7 +170,7 @@ export function useSharedConnection<T>(
         // If we need to handle explicit leadership loss, we can use elector.die()
       }
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   // Cleanup on scope disposal. onScopeDispose works both for a component's

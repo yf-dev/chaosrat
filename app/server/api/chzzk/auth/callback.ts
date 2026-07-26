@@ -1,4 +1,4 @@
-import { ApiError } from "~/lib/interfaces";
+import type { ApiError } from "~/lib/interfaces";
 
 export default defineEventHandler(async (event): Promise<void | ApiError> => {
   try {
@@ -88,7 +88,7 @@ export default defineEventHandler(async (event): Promise<void | ApiError> => {
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",
           maxAge: tokenResponse.content.expiresIn,
-        }
+        },
       );
 
       setCookie(
@@ -100,7 +100,7 @@ export default defineEventHandler(async (event): Promise<void | ApiError> => {
           secure: process.env.NODE_ENV === "production",
           sameSite: "lax",
           maxAge: 30 * 24 * 60 * 60, // 30 days
-        }
+        },
       );
 
       setCookie(event, "chzzk_token_created_at", new Date().toISOString(), {

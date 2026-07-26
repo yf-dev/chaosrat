@@ -40,10 +40,10 @@ export function useDccon(dcconUrl: MaybeRefOrGetter<string | null>) {
     () => ({
       dcconUrl: toValue(dcconUrl),
     }),
-    async (val) => {
+    async (_val) => {
       await initSticker();
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   return {

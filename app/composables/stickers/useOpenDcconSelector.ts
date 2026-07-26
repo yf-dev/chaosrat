@@ -11,7 +11,7 @@ export function useOpenDcconSelector() {
     () => ({
       chatOptions: chatOptions.value,
     }),
-    async (val) => {
+    async (_val) => {
       if (
         !chatOptions.value.isUseOpenDcconSelector ||
         !chatOptions.value.twitchChannel
@@ -22,14 +22,14 @@ export function useOpenDcconSelector() {
         "https://open-dccon-selector.update.sh/api/dccon-url",
         {
           query: { channel_name: chatOptions.value.twitchChannel },
-        }
+        },
       );
       if ("dccon_url" in dcconResult) {
         console.log(`open dccon selector: dccon_url: ${dcconResult.dccon_url}`);
         dcconUrl.value = dcconResult.dccon_url;
       }
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   return {

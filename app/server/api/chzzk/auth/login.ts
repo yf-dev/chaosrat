@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { ChzzkAuthLoginResponse, ApiError } from "~/lib/interfaces";
+import type { ChzzkAuthLoginResponse, ApiError } from "~/lib/interfaces";
 
 export default defineEventHandler(
   async (event): Promise<ChzzkAuthLoginResponse | ApiError> => {
@@ -53,5 +53,5 @@ export default defineEventHandler(
         error: "Internal Server Error",
       };
     }
-  }
+  },
 );

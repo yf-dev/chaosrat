@@ -61,7 +61,7 @@ export function unescapeFormatString(str: string): string {
  */
 export function encodeFormatString(
   message: string,
-  targets: string[]
+  targets: string[],
 ): {
   message: string;
   targets: {
@@ -84,7 +84,7 @@ export function encodeFormatString(
     // so we escape original targets before replacing them
     encodedMessage = encodedMessage.replaceAll(
       escapeFormatString(original),
-      encoded
+      encoded,
     );
   }
 
@@ -105,7 +105,7 @@ function stickerToTag(stickerUrl: string): string {
 export function messageHtml(
   chat: ChatItem,
   emojiToTagFn: (emojiUrl: string) => string = emojiToTag,
-  stickerToTagFn: (stickerUrl: string) => string = stickerToTag
+  stickerToTagFn: (stickerUrl: string) => string = stickerToTag,
 ): string {
   // console.log(chat);
   let message = sanitizeHtml(chat.message);
@@ -115,7 +115,7 @@ export function messageHtml(
     for (const emoji in chat.extra.emojis) {
       message = message.replaceAll(
         emoji,
-        emojiToTagFn(chat.extra.emojis[emoji])
+        emojiToTagFn(chat.extra.emojis[emoji]),
       );
     }
   }
@@ -125,7 +125,7 @@ export function messageHtml(
     for (const sticker in chat.extra.stickers) {
       message = message.replaceAll(
         sticker,
-        stickerToTagFn(chat.extra.stickers[sticker])
+        stickerToTagFn(chat.extra.stickers[sticker]),
       );
     }
   }
@@ -136,7 +136,7 @@ export function messageHtml(
 export function hashCode(str: string): number {
   let hash = 0;
   for (let i = 0, len = str.length; i < len; i++) {
-    let chr = str.charCodeAt(i);
+    const chr = str.charCodeAt(i);
     hash = (hash << 5) - hash + chr;
     hash |= 0; // Convert to 32bit integer
   }
@@ -154,7 +154,7 @@ export function decodeUrlSafeBase64(str: string): string {
 export function hashToColor(
   num: number,
   saturation: number = 100,
-  lightness: number = 50
+  lightness: number = 50,
 ): string {
   return `hsl(${(num % 360).toString()}, ${saturation}%, ${lightness}%)`;
 }
@@ -177,7 +177,7 @@ export function iconUrl(platform: ChatPlatform): string {
 export function parseIntOrDefault(
   str: string,
   radix: number,
-  defaultValue: number
+  defaultValue: number,
 ): number {
   const parsed = parseInt(str, radix);
   return isNaN(parsed) ? defaultValue : parsed;

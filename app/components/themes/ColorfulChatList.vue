@@ -1,7 +1,7 @@
 <template>
   <div class="chat-container">
     <div class="list">
-      <div v-for="(chat, index) in chatItems" :key="chat.id" class="item">
+      <div v-for="chat in chatItems" :key="chat.id" class="item">
         <div
           class="nickname-box"
           :style="
@@ -30,7 +30,7 @@
             {{ chat.nickname }}
           </div>
         </div>
-        <div class="message" v-html="messageHtml(chat)"></div>
+        <div class="message" v-html="messageHtml(chat)" />
       </div>
     </div>
   </div>
@@ -74,10 +74,23 @@ const nicknameColorMap: CSSProperties[] = [
   height: 100vh;
   width: 100vw;
   overflow-wrap: break-word;
-  font-family: "ONE-Mobile-POP", "Pretendard Variable", Pretendard,
-    -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue",
-    "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
-    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+  font-family:
+    "ONE-Mobile-POP",
+    "Pretendard Variable",
+    Pretendard,
+    -apple-system,
+    BlinkMacSystemFont,
+    system-ui,
+    Roboto,
+    "Helvetica Neue",
+    "Segoe UI",
+    "Apple SD Gothic Neo",
+    "Noto Sans KR",
+    "Malgun Gothic",
+    "Apple Color Emoji",
+    "Segoe UI Emoji",
+    "Segoe UI Symbol",
+    sans-serif;
 }
 .list {
   position: absolute;

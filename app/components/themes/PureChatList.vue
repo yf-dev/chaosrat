@@ -7,12 +7,12 @@
           :style="{
             backgroundColor: hashToColor(hashCode(chat.nickname), 100, 70),
           }"
-        ></div>
+        />
         <TextWithShadow
           class="message"
-          :shadowSize="0.1"
+          :shadow-size="0.1"
           v-html="messageHtml(chat)"
-        ></TextWithShadow>
+        />
       </div>
     </div>
   </div>
@@ -25,9 +25,6 @@ import { hashCode, messageHtml, hashToColor } from "~/lib/utils";
 defineProps<{
   chatItems: ChatItem[];
 }>();
-
-const chatOptionsStore = useChatOptionsStore();
-const { chatOptions } = storeToRefs(chatOptionsStore);
 </script>
 
 <style scoped>

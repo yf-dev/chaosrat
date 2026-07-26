@@ -22,7 +22,7 @@ function sleep(ms: number): Promise<void> {
 async function waitFor(
   predicate: () => boolean,
   timeoutMs = 3000,
-  intervalMs = 20
+  intervalMs = 20,
 ): Promise<void> {
   const start = Date.now();
   while (!predicate()) {
@@ -45,7 +45,7 @@ describe("useSharedConnection", () => {
         onBecomeLeader,
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
+      }),
     )!;
 
     try {
@@ -73,7 +73,7 @@ describe("useSharedConnection", () => {
           },
           type: "simulate",
           electionOptions: FAST_ELECTION,
-        })
+        }),
       )!;
       scopes.push(scope);
       insts.push(inst);
@@ -104,7 +104,7 @@ describe("useSharedConnection", () => {
           onData: () => {},
           type: "simulate",
           electionOptions: FAST_ELECTION,
-        })
+        }),
       )!;
       scopes.push(scope);
       insts.push(inst);
@@ -119,12 +119,12 @@ describe("useSharedConnection", () => {
 
       await waitFor(() =>
         insts.some(
-          (inst, i) => i !== leaderIndex && inst.isLeader.value === true
-        )
+          (inst, i) => i !== leaderIndex && inst.isLeader.value === true,
+        ),
       );
 
       const newLeaders = insts.filter(
-        (inst, i) => i !== leaderIndex && inst.isLeader.value
+        (inst, i) => i !== leaderIndex && inst.isLeader.value,
       );
       expect(newLeaders.length).toBe(1);
     } finally {
@@ -144,7 +144,7 @@ describe("useSharedConnection", () => {
         onLoseLeader: () => events.push("lose"),
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
+      }),
     )!;
 
     try {
@@ -182,7 +182,7 @@ describe("useSharedConnection", () => {
         onData: () => {},
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
+      }),
     )!;
     await waitFor(() => holder.isLeader.value === true);
 
@@ -194,7 +194,7 @@ describe("useSharedConnection", () => {
         onBecomeLeader,
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
+      }),
     )!;
 
     const unhandled: unknown[] = [];
@@ -236,15 +236,15 @@ describe("useSharedConnection", () => {
         onData: (d) => dataA.push(d),
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
+      }),
     )!;
-    const b = scopeB.run(() =>
+    scopeB.run(() =>
       useSharedConnection<number>(channelName, {
         onData: (d) => dataB.push(d),
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
-    )!;
+      }),
+    );
 
     try {
       // Let both tabs' channels finish their (microtask-deferred) setup
@@ -272,14 +272,14 @@ describe("useSharedConnection", () => {
         onData: () => {},
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
+      }),
     )!;
     scopeB.run(() =>
       useSharedConnection<number>(channelName, {
         onData: (d) => dataB.push(d),
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
+      }),
     );
 
     try {
@@ -314,7 +314,7 @@ describe("useSharedConnection", () => {
         onLoseLeader: () => events.push("lose"),
         type: "simulate",
         electionOptions: FAST_ELECTION,
-      })
+      }),
     )!;
 
     await waitFor(() => inst.isLeader.value === true);

@@ -89,11 +89,11 @@ export function useTwitch(options: {
     const newClient = new Client({
       channels: [twitchChannel],
     });
-    newClient.on("connected", (address, port) => {
+    newClient.on("connected", (_address, _port) => {
       console.log(`Connected to Twitch ${twitchChannel}`);
     });
 
-    newClient.on("disconnected", (reason) => {
+    newClient.on("disconnected", (_reason) => {
       console.log(`Disconnected from Twitch ${twitchChannel}`);
       new Promise((resolve) => setTimeout(resolve, 1000)).then(initChat);
     });
@@ -122,12 +122,12 @@ export function useTwitch(options: {
       if (chatOptions.value.maxChatSize !== undefined) {
         if (messages.value.length > chatOptions.value.maxChatSize) {
           messages.value = messages.value.slice(
-            messages.value.length - chatOptions.value.maxChatSize
+            messages.value.length - chatOptions.value.maxChatSize,
           );
         }
       }
     });
-    newClient.on("clearchat", (channel) => {
+    newClient.on("clearchat", (_channel) => {
       console.log("Twitch clearchat");
       messages.value = [];
     });
@@ -142,9 +142,9 @@ export function useTwitch(options: {
           userstate,
         });
         messages.value = messages.value.filter(
-          (message) => message.tags.id !== userstate["target-msg-id"]
+          (message) => message.tags.id !== userstate["target-msg-id"],
         );
-      }
+      },
     );
     newClient.on("ban", (channel, username, reason, userstate) => {
       console.log("Twitch ban");
@@ -155,14 +155,14 @@ export function useTwitch(options: {
         userstate,
       });
       messages.value = messages.value.filter(
-        (message) => message.tags["user-id"] !== userstate["target-user-id"]
+        (message) => message.tags["user-id"] !== userstate["target-user-id"],
       );
     });
     await newClient.connect();
     twitchChatClient.value = newClient;
 
     const badgeResponse = await $fetch<TwitchBadgesResponse | ApiError>(
-      `/api/twitch/badges?twitchChannelId=${twitchChannel}`
+      `/api/twitch/badges?twitchChannelId=${twitchChannel}`,
     );
     if (badgeResponse.status === "OK") {
       badgeData.value = badgeResponse.badge;
@@ -176,10 +176,10 @@ export function useTwitch(options: {
     () => ({
       chatOptions: chatOptions.value,
     }),
-    async (val) => {
+    async (_val) => {
       await initChat();
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   onBeforeUnmount(async () => {

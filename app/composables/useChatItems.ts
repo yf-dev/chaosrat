@@ -78,7 +78,7 @@ export function useChatItems(options: ChatItemsOptions) {
         options.onNewChatItem?.(lastItem);
       }
     },
-    { immediate: true }
+    { immediate: true },
   );
   return { chatItems, errors };
 }

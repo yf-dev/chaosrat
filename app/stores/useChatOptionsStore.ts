@@ -179,7 +179,7 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
     (val) => {
       chatOptions.value = val;
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   return { chatOptions };

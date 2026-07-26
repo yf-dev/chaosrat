@@ -1,4 +1,4 @@
-import { ChzzkChatChannelIdResponse, ApiError } from "~/lib/interfaces";
+import type { ChzzkChatChannelIdResponse, ApiError } from "~/lib/interfaces";
 
 export default defineEventHandler(
   async (event): Promise<ChzzkChatChannelIdResponse | ApiError> => {
@@ -17,7 +17,7 @@ export default defineEventHandler(
           chatChannelId?: string;
         };
       }>(
-        `https://api.chzzk.naver.com/polling/v2/channels/${channelId}/live-status`
+        `https://api.chzzk.naver.com/polling/v2/channels/${channelId}/live-status`,
       );
       if (response?.content?.chatChannelId === undefined) {
         return {
@@ -40,5 +40,5 @@ export default defineEventHandler(
         error: "Internal Server Error",
       };
     }
-  }
+  },
 );

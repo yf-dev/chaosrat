@@ -17,14 +17,13 @@ function createHarness() {
   const sockets: SocketRecord[] = [];
   let nextId = 0;
 
-  const fetchSessionUrl = vi.fn(
-    async (): Promise<SessionUrlResult> => ({ status: "OK", url: "default" })
-  );
+  const fetchSessionUrl = vi.fn(async (): Promise<SessionUrlResult> => ({
+    status: "OK",
+    url: "default",
+  }));
   const refreshToken = vi.fn(async (): Promise<boolean> => true);
   const subscribeChat = vi.fn(async (_key: string): Promise<boolean> => true);
-  const unsubscribeChat = vi.fn(
-    async (_key: string): Promise<boolean> => true
-  );
+  const unsubscribeChat = vi.fn(async (_key: string): Promise<boolean> => true);
   const onEvent = vi.fn();
   const onAuthRequired = vi.fn();
 
@@ -33,7 +32,7 @@ function createHarness() {
       const close = vi.fn();
       sockets.push({ id: nextId++, url, handlers, close });
       return { close };
-    }
+    },
   );
 
   const deps: ChzzkConnectionDeps = {
@@ -202,7 +201,10 @@ describe("createChzzkConnection", () => {
     expect(h.createSocket).not.toHaveBeenCalled();
 
     // Auth recovers on the next recheck.
-    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://recovered" });
+    h.fetchSessionUrl.mockResolvedValue({
+      status: "OK",
+      url: "wss://recovered",
+    });
     await vi.advanceTimersByTimeAsync(timings.authRecheckInterval);
 
     expect(h.onAuthRequired).toHaveBeenLastCalledWith(false);
@@ -318,12 +320,14 @@ describe("createChzzkConnection", () => {
 
     let firstClosedBeforeSecondCreated = false;
     const originalImpl = h.createSocket.getMockImplementation()!;
-    h.createSocket.mockImplementation((url: string, handlers: ChzzkSocketHandlers) => {
-      if (firstSocket.close.mock.calls.length > 0) {
-        firstClosedBeforeSecondCreated = true;
-      }
-      return originalImpl(url, handlers);
-    });
+    h.createSocket.mockImplementation(
+      (url: string, handlers: ChzzkSocketHandlers) => {
+        if (firstSocket.close.mock.calls.length > 0) {
+          firstClosedBeforeSecondCreated = true;
+        }
+        return originalImpl(url, handlers);
+      },
+    );
 
     firstSocket.handlers.onDisconnect();
     await vi.advanceTimersByTimeAsync(timings.retryBaseDelay);
@@ -432,7 +436,7 @@ describe("createChzzkConnection", () => {
       socket.handlers.onMessage("SYSTEM", "{not valid json");
     }).not.toThrow();
     expect(h.onEvent).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: "SYSTEM", message: undefined })
+      expect.objectContaining({ type: "SYSTEM", message: undefined }),
     );
 
     await conn.stop();
@@ -443,12 +447,17 @@ describe("createChzzkConnection", () => {
     // The session URL fetch always succeeds, but the socket it opens always
     // fails to establish (e.g. connect_error). failureCount must accumulate
     // across cycles instead of being wiped out by the successful fetch.
-    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://always-ok" });
-    h.createSocket.mockImplementation((_url: string, handlers: ChzzkSocketHandlers) => {
-      const close = vi.fn();
-      handlers.onError(new Error("connect_error"));
-      return { close };
+    h.fetchSessionUrl.mockResolvedValue({
+      status: "OK",
+      url: "wss://always-ok",
     });
+    h.createSocket.mockImplementation(
+      (_url: string, handlers: ChzzkSocketHandlers) => {
+        const close = vi.fn();
+        handlers.onError(new Error("connect_error"));
+        return { close };
+      },
+    );
     const conn = createChzzkConnection(h.deps, timings);
 
     conn.start();
@@ -480,7 +489,10 @@ describe("createChzzkConnection", () => {
 
   it("16. a socket whose close() synchronously fires onDisconnect still backs off on the designed exponential schedule", async () => {
     const h = createHarness();
-    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://always-ok" });
+    h.fetchSessionUrl.mockResolvedValue({
+      status: "OK",
+      url: "wss://always-ok",
+    });
     h.createSocket.mockImplementation(
       (_url: string, handlers: ChzzkSocketHandlers) => {
         const close = vi.fn(() => {
@@ -495,7 +507,7 @@ describe("createChzzkConnection", () => {
           handlers.onError(new Error("connect_error"));
         });
         return { close };
-      }
+      },
     );
     const conn = createChzzkConnection(h.deps, timings);
 
@@ -533,7 +545,7 @@ describe("createChzzkConnection", () => {
           handlers.onDisconnect();
         });
         return { close };
-      }
+      },
     );
     const conn = createChzzkConnection(h.deps, timings);
 
@@ -551,7 +563,7 @@ describe("createChzzkConnection", () => {
 
     // ...only once, on the slower auth-recheck cadence.
     await vi.advanceTimersByTimeAsync(
-      timings.authRecheckInterval - timings.retryBaseDelay
+      timings.authRecheckInterval - timings.retryBaseDelay,
     );
     expect(h.fetchSessionUrl.mock.calls.length).toBe(callsRightAfter + 1);
 
@@ -567,7 +579,7 @@ describe("createChzzkConnection", () => {
           handlers.onDisconnect();
         });
         return { close };
-      }
+      },
     );
     const conn = createChzzkConnection(h.deps, timings);
 

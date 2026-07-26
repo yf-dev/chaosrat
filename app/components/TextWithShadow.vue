@@ -1,6 +1,6 @@
 <template>
   <div class="text-with-shadow">
-    <slot></slot>
+    <slot />
   </div>
 </template>
 
@@ -15,12 +15,12 @@ const props = withDefaults(
     shadowColor: "black",
     shadowSize: 0.1,
     unit: "rem",
-  }
+  },
 );
 
 const straghtShadow = computed(() => `${props.shadowSize}${props.unit}`);
 const diagonalShadow = computed(
-  () => `${Math.sqrt((props.shadowSize * props.shadowSize) / 2)}${props.unit}`
+  () => `${Math.sqrt((props.shadowSize * props.shadowSize) / 2)}${props.unit}`,
 );
 const negativeStraghtShadow = computed(() => `-${straghtShadow.value}`);
 const negativeDiagonalShadow = computed(() => `-${diagonalShadow.value}`);
@@ -28,7 +28,8 @@ const negativeDiagonalShadow = computed(() => `-${diagonalShadow.value}`);
 
 <style scoped>
 .text-with-shadow {
-  text-shadow: v-bind(diagonalShadow) v-bind(diagonalShadow) v-bind(shadowColor),
+  text-shadow:
+    v-bind(diagonalShadow) v-bind(diagonalShadow) v-bind(shadowColor),
     v-bind(straghtShadow) 0 v-bind(shadowColor),
     v-bind(diagonalShadow) v-bind(negativeDiagonalShadow) v-bind(shadowColor),
     0 v-bind(negativeStraghtShadow) v-bind(shadowColor),

@@ -99,7 +99,7 @@ export function useChzzk(options: {
         "/api/chzzk/session/open",
         {
           timeout: 5000,
-        }
+        },
       );
       if (data.status === "OK") {
         return { status: "OK", url: data.url };
@@ -128,7 +128,7 @@ export function useChzzk(options: {
       socket.on("SYSTEM", (raw: string) => handlers.onMessage("SYSTEM", raw));
       socket.on("CHAT", (raw: string) => handlers.onMessage("CHAT", raw));
       socket.on("DONATION", (raw: string) =>
-        handlers.onMessage("DONATION", raw)
+        handlers.onMessage("DONATION", raw),
       );
       return {
         close: () => socket.close(),
@@ -142,7 +142,7 @@ export function useChzzk(options: {
             method: "POST",
             body: { sessionKey },
             timeout: 5000,
-          }
+          },
         );
         if (data.status === "ERROR") {
           console.log(`Chzzk subscribeChat Error: ${data.error}`);
@@ -164,7 +164,7 @@ export function useChzzk(options: {
             method: "POST",
             body: { sessionKey },
             timeout: 5000,
-          }
+          },
         );
         if (data.status === "ERROR") {
           console.log(`Chzzk unsubscribeChat Error: ${data.error}`);
@@ -228,7 +228,7 @@ export function useChzzk(options: {
           if (chatOptions.value.maxChatSize !== undefined) {
             if (messages.value.length > chatOptions.value.maxChatSize) {
               messages.value = messages.value.slice(
-                messages.value.length - chatOptions.value.maxChatSize
+                messages.value.length - chatOptions.value.maxChatSize,
               );
             }
           }
@@ -236,7 +236,7 @@ export function useChzzk(options: {
           console.log("Chzzk DONATION", data.message);
         }
       },
-    }
+    },
   ));
 
   function showLoginError() {
@@ -255,7 +255,7 @@ export function useChzzk(options: {
               query: {
                 redirectTo: `${requestUrl.pathname}${requestUrl.search}`,
               },
-            }
+            },
           );
           if (response.status === "OK") {
             window.location.href = response.authUrl;
@@ -295,7 +295,7 @@ export function useChzzk(options: {
 
   function hideCcidMismatchError() {
     errors.value = errors.value.filter(
-      (error) => error.id !== "chzzk-ccid-mismatch"
+      (error) => error.id !== "chzzk-ccid-mismatch",
     );
   }
 
@@ -308,7 +308,7 @@ export function useChzzk(options: {
 
     async function checkMe() {
       const response = await $fetch<ChzzkMeResponse | ApiError>(
-        "/api/chzzk/me"
+        "/api/chzzk/me",
       );
       if (response.status === "OK") {
         if (response.channelId !== chatOptions.value.chzzkChannelId) {
@@ -325,14 +325,14 @@ export function useChzzk(options: {
 
     try {
       if (await checkMe()) return;
-    } catch (e) {
+    } catch {
       // First attempt failed, try refreshing token
     }
 
     try {
       await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
       if (await checkMe()) return;
-    } catch (e) {
+    } catch {
       // Refresh failed
     }
 
@@ -345,7 +345,7 @@ export function useChzzk(options: {
     () => chatOptions.value.chzzkChannelId,
     () => {
       void checkAuth();
-    }
+    },
   );
 
   onScopeDispose(() => {

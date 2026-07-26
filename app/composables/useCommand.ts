@@ -36,7 +36,7 @@ export function useCommand(options: CommandOptions) {
         executeClear();
         return true;
       case "set":
-      case "설정":
+      case "설정": {
         if (args.length !== 2) {
           console.log("Invalid number of arguments for set command");
           return true;
@@ -44,6 +44,7 @@ export function useCommand(options: CommandOptions) {
         const [variable, value] = args;
         executeSet(variable, value);
         return true;
+      }
       default:
         console.log("Unknown command:", command);
     }

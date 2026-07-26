@@ -13,10 +13,7 @@
       {{ error.message }}
     </div>
   </div>
-  <component
-    :is="chatListComponent"
-    :chatItems="processedChatItems"
-  ></component>
+  <component :is="chatListComponent" :chat-items="processedChatItems" />
 </template>
 
 <script setup lang="ts">
@@ -131,7 +128,7 @@ function playSoundEffect() {
 
 const { chatItems, errors } = useChatItems({
   filter: filterChatItems,
-  onNewChatItem: (chat) => {
+  onNewChatItem: (_chat) => {
     playSoundEffect();
   },
 });
@@ -160,7 +157,7 @@ const processedChatItems = computed(() => {
     };
     const { message: newMessage, targets: newTargets } = encodeFormatString(
       newChat.message,
-      Object.keys(encodeTargets)
+      Object.keys(encodeTargets),
     );
 
     const newEmojis: { [key: string]: string } = {};

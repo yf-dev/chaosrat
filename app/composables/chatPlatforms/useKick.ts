@@ -21,7 +21,9 @@ interface KickSubscriberBadge {
 
 interface KickWebsocketMessage {
   event: string;
-  data: any;
+  // Pusher double-encodes the payload: this is a JSON string that gets
+  // JSON.parse()'d again into the concrete per-event-type shape below.
+  data: string;
   channel?: string;
 }
 
@@ -84,7 +86,7 @@ function handleKickEmojis(message: KickMessage) {
 
 function handleKickBadges(
   message: KickMessage,
-  subscriberBadges: KickSubscriberBadge[]
+  subscriberBadges: KickSubscriberBadge[],
 ) {
   const filteredBadges: { [key: string]: string } = {};
   if (message.chatMessageEventData.sender.identity.badges) {
@@ -166,11 +168,11 @@ export function useKick(options: {
         {
           timeout: 1000,
           parseResponse: JSON.parse,
-        }
+        },
       );
       kickChatroomId.value = data.chatroom.id;
       subscriberBadges.value = data.subscriber_badges.sort(
-        (a, b) => a.months - b.months
+        (a, b) => a.months - b.months,
       );
     } catch (e) {
       console.log("Kick updateKickChatroomId Error");
@@ -196,16 +198,16 @@ export function useKick(options: {
         pongTimeout: 1000,
       },
       immediate: false,
-      onConnected: (ws: WebSocket) => {
+      onConnected: (_ws: WebSocket) => {
         console.log(`Connected to Kick ${chatOptions.value.kickChannel}`);
       },
-      onDisconnected: (ws: WebSocket, event: CloseEvent) => {
+      onDisconnected: (_ws: WebSocket, _event: CloseEvent) => {
         console.log(`Disconnected from Kick ${chatOptions.value.kickChannel}`);
       },
-      onError: (ws: WebSocket, event: Event) => {
+      onError: (_ws: WebSocket, _event: Event) => {
         console.log(`Error from Kick ${chatOptions.value.kickChannel}`);
       },
-    }
+    },
   );
 
   function initChat() {
@@ -229,7 +231,7 @@ export function useKick(options: {
     if (message.event === "pusher:connection_established") {
       console.log("Kick connection established");
       webSocketSend(
-        `{"event":"pusher:subscribe","data":{"auth":"","channel":"chatrooms.${kickChatroomId.value}.v2"}}`
+        `{"event":"pusher:subscribe","data":{"auth":"","channel":"chatrooms.${kickChatroomId.value}.v2"}}`,
       );
     }
     if (message.event === "App\\Events\\ChatMessageEvent") {
@@ -239,7 +241,7 @@ export function useKick(options: {
       if (options.onBroadcasterMessage) {
         if (
           data.sender.identity.badges.some(
-            (badge) => badge.type === "broadcaster"
+            (badge) => badge.type === "broadcaster",
           )
         ) {
           if (options.onBroadcasterMessage(data.content)) {
@@ -254,7 +256,7 @@ export function useKick(options: {
       if (chatOptions.value.maxChatSize !== undefined) {
         if (messages.value.length > chatOptions.value.maxChatSize) {
           messages.value = messages.value.slice(
-            messages.value.length - chatOptions.value.maxChatSize
+            messages.value.length - chatOptions.value.maxChatSize,
           );
         }
       }
@@ -266,18 +268,18 @@ export function useKick(options: {
       chatOptions: chatOptions.value,
       kickChatroomId: kickChatroomId.value,
     }),
-    (val) => {
+    (_val) => {
       initChat();
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   watch(
     () => webSocketData.value,
-    (val) => {
+    (_val) => {
       onMessage();
     },
-    { immediate: true }
+    { immediate: true },
   );
 
   onBeforeUnmount(() => {

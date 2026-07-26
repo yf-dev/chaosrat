@@ -11,7 +11,12 @@
     "postinstall": "nuxt prepare",
     "clean": "nuxt cleanup",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "cd .. && husky app/.husky"
   },
   "dependencies": {
     "@pinia/nuxt": "^0.5.1",
@@ -34,11 +39,25 @@
     "youtube-chat": "^2.2.0"
   },
   "devDependencies": {
+    "@nuxt/eslint": "1.16.0",
     "@types/sanitize-html": "^2.11.0",
     "@types/socket.io-client": "1.4.36",
     "@types/tmi.js": "^1.8.6",
+    "eslint": "10.8.0",
     "happy-dom": "^20.11.1",
+    "husky": "9.1.7",
+    "lint-staged": "17.2.0",
     "nuxt-gtag": "^2.0.5",
+    "prettier": "3.9.6",
     "vitest": "^4.1.10"
+  },
+  "lint-staged": {
+    "*.{js,mjs,cjs,ts,vue}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,css,yml,yaml,html}": [
+      "prettier --write"
+    ]
   }
 }

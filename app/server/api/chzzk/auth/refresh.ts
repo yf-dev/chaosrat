@@ -1,4 +1,4 @@
-import { ApiError, ApiOk } from "~/lib/interfaces";
+import type { ApiError, ApiOk } from "~/lib/interfaces";
 
 interface RefreshTokenResult {
   accessToken: string;
