@@ -1,5 +1,23 @@
 import { ApiError, ApiOk } from "~/lib/interfaces";
 
+interface RefreshTokenResult {
+  accessToken: string;
+  refreshToken: string;
+  expiresIn: number;
+}
+
+// The Chzzk refresh token is single-use: every grantType=refresh_token
+// exchange invalidates the old refresh token and issues a new one. Multiple
+// OBS Browser Sources (tabs) can hit this route concurrently with the same
+// (still valid, at the time each request was sent) refresh token cookie, so
+// this single-flight collapses concurrent/near-concurrent requests keyed by
+// that cookie value into a single upstream exchange, and lets later callers
+// within cacheMs reuse the same result instead of retrying with an
+// already-invalidated token.
+const refreshFlight = createSingleFlight<RefreshTokenResult>({
+  cacheMs: 60_000,
+});
+
 export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
   try {
     const config = useRuntimeConfig(event);
@@ -14,64 +32,64 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
     }
 
     try {
-      // Exchange code for access token
-      const tokenResponse = await $fetch<{
-        code: number;
-        message: string | null;
-        content?: {
-          accessToken: string;
-          refreshToken: string;
-          tokenType: string;
-          expiresIn: number;
-          scope: string;
+      const result = await refreshFlight.run(refreshToken, async () => {
+        // Exchange code for access token
+        const tokenResponse = await $fetch<{
+          code: number;
+          message: string | null;
+          content?: {
+            accessToken: string;
+            refreshToken: string;
+            tokenType: string;
+            expiresIn: number;
+            scope: string;
+          };
+        }>("/auth/v1/token", {
+          baseURL: "https://chzzk.naver.com",
+          method: "POST",
+          body: {
+            grantType: "refresh_token",
+            refreshToken: refreshToken,
+            clientId: config.chzzkClientId,
+            clientSecret: config.chzzkClientSecret,
+          },
+        });
+
+        if (
+          !tokenResponse.content?.accessToken ||
+          !tokenResponse.content?.refreshToken ||
+          !tokenResponse.content?.expiresIn
+        ) {
+          throw createError({
+            statusCode: 502,
+            message: "Failed to get Chzzk access token",
+          });
+        }
+
+        return {
+          accessToken: tokenResponse.content.accessToken,
+          refreshToken: tokenResponse.content.refreshToken,
+          expiresIn: tokenResponse.content.expiresIn,
         };
-      }>("/auth/v1/token", {
-        baseURL: "https://chzzk.naver.com",
-        method: "POST",
-        body: {
-          grantType: "refresh_token",
-          refreshToken: refreshToken,
-          clientId: config.chzzkClientId,
-          clientSecret: config.chzzkClientSecret,
-        },
       });
 
-      if (
-        !tokenResponse.content?.accessToken ||
-        !tokenResponse.content?.refreshToken ||
-        !tokenResponse.content?.expiresIn
-      ) {
-        return {
-          status: "ERROR",
-          code: "invalid_token",
-          error: "Failed to get Chzzk access token",
-        };
-      }
+      // Store tokens in secure httpOnly cookies. This runs per request (not
+      // once inside the flight) since cookies are per-response: every
+      // caller — the one that did the work and the ones that joined or hit
+      // the cache — must still get the tokens written to their own response.
+      setCookie(event, "chzzk_access_token", result.accessToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: result.expiresIn,
+      });
 
-      // Store tokens in secure httpOnly cookies
-      setCookie(
-        event,
-        "chzzk_access_token",
-        tokenResponse.content.accessToken,
-        {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          maxAge: tokenResponse.content.expiresIn,
-        }
-      );
-
-      setCookie(
-        event,
-        "chzzk_refresh_token",
-        tokenResponse.content.refreshToken,
-        {
-          httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: "lax",
-          maxAge: 30 * 24 * 60 * 60, // 30 days
-        }
-      );
+      setCookie(event, "chzzk_refresh_token", result.refreshToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 30 * 24 * 60 * 60, // 30 days
+      });
 
       setCookie(event, "chzzk_token_created_at", new Date().toISOString(), {
         httpOnly: true,

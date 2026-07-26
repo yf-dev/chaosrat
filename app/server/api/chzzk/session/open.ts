@@ -22,6 +22,17 @@ export default defineEventHandler(
         headers: { Authorization: `Bearer ${accessToken}` },
       });
 
+      // Chzzk mirrors the HTTP status inside the response envelope, so a
+      // 200-status response can still carry code: 401 (INVALID_TOKEN /
+      // UNAUTHORIZED) when the access token is stale.
+      if (response.code === 401) {
+        return {
+          status: "ERROR",
+          code: "unauthorized",
+          error: "Chzzk rejected the access token",
+        };
+      }
+
       if (!response.content?.url) {
         return {
           status: "ERROR",
@@ -35,6 +46,24 @@ export default defineEventHandler(
         url: response.content?.url,
       };
     } catch (error) {
+      // $fetch throws a FetchError on non-2xx responses; check the
+      // possible shapes defensively since ofetch's error surface differs
+      // across environments/versions.
+      const status =
+        (error as { response?: { status?: number } })?.response?.status ??
+        (error as { statusCode?: number })?.statusCode ??
+        (error as { status?: number })?.status;
+
+      if (status === 401) {
+        console.log("Chzzk session/open Api Error: unauthorized");
+        console.error(error);
+        return {
+          status: "ERROR",
+          code: "unauthorized",
+          error: "Chzzk rejected the access token",
+        };
+      }
+
       console.log("Chzzk session/open Api Error");
       console.error(error);
       // if (error && typeof error === "object" && "data" in error) {

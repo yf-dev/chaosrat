@@ -1,3 +1,9 @@
 .vscode
-.devcontainer.json
 docker-compose.*.yml
+
+# devcontainer
+.devcontainer
+
+# claude
+.claude
+CLAUDE.local.md

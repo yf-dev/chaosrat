@@ -9,7 +9,9 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
-    "clean": "nuxt cleanup"
+    "clean": "nuxt cleanup",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@pinia/nuxt": "^0.5.1",
@@ -35,6 +37,8 @@
     "@types/sanitize-html": "^2.11.0",
     "@types/socket.io-client": "1.4.36",
     "@types/tmi.js": "^1.8.6",
-    "nuxt-gtag": "^2.0.5"
+    "happy-dom": "^20.11.1",
+    "nuxt-gtag": "^2.0.5",
+    "vitest": "^4.1.10"
   }
 }

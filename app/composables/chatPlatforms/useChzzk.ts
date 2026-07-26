@@ -1,4 +1,5 @@
 import { useTimeoutPoll } from "@vueuse/core";
+import io from "socket.io-client";
 import type {
   ApiError,
   ChatItem,
@@ -8,94 +9,17 @@ import type {
   ChzzkMeResponse,
   ChzzkAuthLoginResponse,
 } from "~/lib/interfaces";
-import { useSocketIo } from "../useSocketIo";
+import {
+  createChzzkConnection,
+  type ChzzkChatSessionMessage,
+  type ChzzkSessionMessageData,
+} from "~/lib/chzzkConnection";
 import { useSharedConnection } from "../useSharedConnection";
 
 interface ChzzkMessage {
   chatItem: ChzzkChatSessionMessage;
   timestamp: number;
 }
-
-interface ChzzkSystemConnectedSessionMessage {
-  type: "connected";
-  data: {
-    sessionKey: string;
-  };
-}
-
-interface ChzzkSystemSubscribedSessionMessage {
-  type: "subscribed";
-  data: {
-    eventType: "CHAT" | "DONATION";
-    channelId: string;
-  };
-}
-
-interface ChzzkSystemUnsubscribedSessionMessage {
-  type: "unsubscribed";
-  data: {
-    eventType: "CHAT" | "DONATION";
-    channelId: string;
-  };
-}
-
-interface ChzzkSystemRevokedSessionMessage {
-  type: "revoked";
-  data: {
-    eventType: "CHAT" | "DONATION";
-    channelId: string;
-  };
-}
-
-type ChzzkSystemSessionMessage =
-  | ChzzkSystemConnectedSessionMessage
-  | ChzzkSystemSubscribedSessionMessage
-  | ChzzkSystemUnsubscribedSessionMessage
-  | ChzzkSystemRevokedSessionMessage;
-
-interface ChzzkChatSessionMessage {
-  channelId: string;
-  senderChannelId: string;
-  profile: {
-    nickname: string;
-    badges: {
-      imageUrl: string;
-      [key: string]: string;
-    }[];
-    verifiedMark: boolean;
-  };
-  content: string;
-  emojis: {
-    [key: string]: string;
-  };
-  messageTime: number;
-}
-
-interface ChzzkDonationSessionMessage {
-  donationType: "CHAT" | "VIDEO";
-  channelId: string;
-  donatorChannelId: string;
-  donatorNickname: string;
-  payAmount: number;
-  donationText: string;
-  emojis: {
-    [key: string]: string;
-  };
-}
-
-type ChzzkSessionMessageData =
-  | {
-      type: "SYSTEM";
-      message: ChzzkSystemSessionMessage;
-    }
-  | {
-      type: "CHAT";
-      message: ChzzkChatSessionMessage;
-    }
-  | {
-      type: "DONATION";
-      message: ChzzkDonationSessionMessage;
-    };
 
 function handleChzzkEmojis(message: ChzzkChatSessionMessage) {
   const emojis: { [key: string]: string } = {};
@@ -132,7 +56,6 @@ export function useChzzk(options: {
   const chatOptionsStore = useChatOptionsStore();
   const { chatOptions } = storeToRefs(chatOptionsStore);
   const messages = ref<ChzzkMessage[]>([]);
-  const sessionKey = ref<string | null>(null);
   const errors = ref<ChatPlatformError[]>([]);
 
   const chatItems = computed(() => {
@@ -158,20 +81,128 @@ export function useChzzk(options: {
     return `chaosrat-chzzk-${chatOptions.value.chzzkChannelId}`;
   });
 
-  const { isLeader, sendData } = useSharedConnection<ChzzkSessionMessageData>(
+  // `sendData` (from useSharedConnection) and `connection` (from
+  // createChzzkConnection) each need to reference the other: the connection's
+  // `onEvent` dep forwards to `sendData`, and useSharedConnection's
+  // onBecomeLeader/onLoseLeader callbacks need to call `connection.start()` /
+  // `connection.stop()`. Declare `connection` first and have its `onEvent`
+  // call `sendData` through a closure over the `let` below, which is assigned
+  // once useSharedConnection has run.
+  let sendData: (data: ChzzkSessionMessageData) => void;
+
+  const connection = createChzzkConnection({
+    fetchSessionUrl: async () => {
+      if (!chatOptions.value.chzzkChannelId) {
+        return { status: "ERROR" };
+      }
+      const data = await $fetch<ChzzkSessionOpenResponse | ApiError>(
+        "/api/chzzk/session/open",
+        {
+          timeout: 5000,
+        }
+      );
+      if (data.status === "OK") {
+        return { status: "OK", url: data.url };
+      }
+      if (data.code === "not_logged_in" || data.code === "unauthorized") {
+        return { status: "UNAUTHORIZED" };
+      }
+      return { status: "ERROR", code: data.code };
+    },
+    refreshToken: async () => {
+      const result = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
+      return result.status === "OK";
+    },
+    createSocket: (url, handlers) => {
+      const socket = io.connect(url, {
+        reconnection: false,
+        forceNew: true,
+        timeout: 3000,
+        transports: ["websocket"],
+      });
+      socket.on("connect", () => handlers.onConnect());
+      socket.on("disconnect", () => handlers.onDisconnect());
+      socket.on("connect_error", (err: unknown) => handlers.onError(err));
+      socket.on("connect_timeout", (err: unknown) => handlers.onError(err));
+      socket.on("error", (err: unknown) => handlers.onError(err));
+      socket.on("SYSTEM", (raw: string) => handlers.onMessage("SYSTEM", raw));
+      socket.on("CHAT", (raw: string) => handlers.onMessage("CHAT", raw));
+      socket.on("DONATION", (raw: string) =>
+        handlers.onMessage("DONATION", raw)
+      );
+      return {
+        close: () => socket.close(),
+      };
+    },
+    subscribeChat: async (sessionKey) => {
+      try {
+        const data = await $fetch<ApiOk | ApiError>(
+          "/api/chzzk/session/subscribeChat",
+          {
+            method: "POST",
+            body: { sessionKey },
+            timeout: 5000,
+          }
+        );
+        if (data.status === "ERROR") {
+          console.log(`Chzzk subscribeChat Error: ${data.error}`);
+          return false;
+        }
+        console.log("Chat subscribed successfully");
+        return true;
+      } catch (error) {
+        console.log("Chzzk subscribeChat Error");
+        console.error(error);
+        return false;
+      }
+    },
+    unsubscribeChat: async (sessionKey) => {
+      try {
+        const data = await $fetch<ApiOk | ApiError>(
+          "/api/chzzk/session/unsubscribeChat",
+          {
+            method: "POST",
+            body: { sessionKey },
+            timeout: 5000,
+          }
+        );
+        if (data.status === "ERROR") {
+          console.log(`Chzzk unsubscribeChat Error: ${data.error}`);
+          return false;
+        }
+        console.log("Chat unsubscribed successfully");
+        return true;
+      } catch (error) {
+        console.log("Chzzk unsubscribeChat Error");
+        console.error(error);
+        return false;
+      }
+    },
+    onEvent: (data) => {
+      sendData(data);
+    },
+    onAuthRequired: (required) => {
+      if (required) {
+        showLoginError();
+      } else {
+        hideLoginError();
+      }
+    },
+  });
+
+  ({ sendData } = useSharedConnection<ChzzkSessionMessageData>(
     sharedChannelName,
     {
       onBecomeLeader: () => {
-        initChat();
+        connection.start();
       },
       onLoseLeader: () => {
-        socketClose();
+        void connection.stop();
       },
       onData: (data) => {
         if (data.type === "SYSTEM") {
           if (data.message.type === "connected") {
             console.log("Chzzk Connected", data.message);
-            sessionKey.value = data.message.data.sessionKey;
           } else if (data.message.type === "subscribed") {
             console.log("Chzzk Subscribed", data.message);
           } else if (data.message.type === "unsubscribed") {
@@ -206,149 +237,7 @@ export function useChzzk(options: {
         }
       },
     }
-  );
-
-  const socketUrl = ref<string | undefined>(undefined);
-  async function updateSocketUrl() {
-    try {
-      if (!chatOptions.value.chzzkChannelId) {
-        return;
-      }
-
-      const data = await $fetch<ChzzkSessionOpenResponse | ApiError>(
-        "/api/chzzk/session/open",
-        {
-          timeout: 5000,
-        }
-      );
-      if (data.status === "ERROR") {
-        console.log(`Chzzk openSession Error: ${data.error}`);
-        return;
-      }
-      socketUrl.value = data.url;
-    } catch (e) {
-      console.log("Chzzk updateSocketUrl Error");
-      console.error(e);
-    }
-  }
-  useTimeoutPoll(updateSocketUrl, 1000 * 60 * 60 * 12, { immediate: true }); // 12 hours interval
-
-  async function refreshToken() {
-    const result = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
-    if (result.status === "OK") {
-      await updateSocketUrl();
-    }
-  }
-  useTimeoutPoll(refreshToken, 1000 * 60 * 60 * 24 * 3, { immediate: false }); // 3 days interval
-
-  const {
-    status: socketStatus,
-    open: socketOpen,
-    close: socketClose,
-  } = useSocketIo(socketUrl, {
-    socketOptions: {
-      reconnection: true,
-      forceNew: true,
-      timeout: 3000,
-      transports: ["websocket"],
-    },
-    immediate: false,
-    onConnected: () => {
-      console.log("Connected to Chzzk");
-    },
-    onDisconnected: () => {
-      console.log("Disconnected from Chzzk");
-      if (isLeader.value) {
-        new Promise((resolve) => setTimeout(resolve, 500)).then(
-          updateSocketUrl
-        );
-      }
-    },
-    events: {
-      SYSTEM: (messageString: string) => {
-        const message = JSON.parse(messageString) as ChzzkSystemSessionMessage;
-        if (isLeader.value) {
-          sendData({
-            type: "SYSTEM",
-            message,
-          });
-        }
-      },
-      CHAT: (messageString: string) => {
-        const message = JSON.parse(messageString) as ChzzkChatSessionMessage;
-        if (isLeader.value) {
-          sendData({
-            type: "CHAT",
-            message,
-          });
-        }
-      },
-      DONATION: (messageString: string) => {
-        const message = JSON.parse(
-          messageString
-        ) as ChzzkDonationSessionMessage;
-        if (isLeader.value) {
-          sendData({
-            type: "DONATION",
-            message,
-          });
-        }
-      },
-    },
-  });
-
-  function initChat() {
-    if (!chatOptions.value.chzzkChannelId) {
-      return;
-    }
-    // remove previous chat client
-    if (socketStatus.value !== "CLOSED") {
-      socketClose();
-    }
-    socketOpen();
-  }
-
-  async function subscribeChat(sessionKey: string) {
-    try {
-      const data = await $fetch<ApiOk | ApiError>(
-        "/api/chzzk/session/subscribeChat",
-        {
-          method: "POST",
-          body: { sessionKey },
-          timeout: 5000,
-        }
-      );
-      if (data.status === "ERROR") {
-        console.log(`Chzzk subscribeChat Error: ${data.error}`);
-        return;
-      }
-      console.log("Chat subscribed successfully");
-    } catch (error) {
-      console.log("Chzzk subscribeChat Error");
-      console.error(error);
-    }
-  }
-
-  async function unsubscribeChat(sessionKey: string) {
-    try {
-      const data = await $fetch<ApiOk | ApiError>(
-        "/api/chzzk/session/unsubscribeChat",
-        {
-          method: "POST",
-          body: { sessionKey },
-          timeout: 5000,
-        }
-      );
-      if (data.status === "ERROR") {
-        console.log(`Chzzk unsubscribeChat Error: ${data.error}`);
-        return;
-      }
-      console.log("Chat unsubscribed successfully");
-    } catch (error) {
-      console.log("Chzzk unsubscribeChat Error");
-      console.error(error);
-    }
-  }
+  ));
 
   function showLoginError() {
     if (errors.value.find((error) => error.id === "chzzk-login")) {
@@ -410,91 +299,57 @@ export function useChzzk(options: {
     );
   }
 
-  watch(
-    () => ({
-      socketUrl: socketUrl.value,
-      isLeader: isLeader.value,
-    }),
-    (val, oldVal) => {
-      if (
-        val.socketUrl &&
-        val.socketUrl !== oldVal?.socketUrl &&
-        val.isLeader
-      ) {
-        initChat();
-      }
-    },
-    { immediate: true }
-  );
-
-  watch(
-    () => ({
-      sessionKey: sessionKey.value,
-      isLeader: isLeader.value,
-    }),
-    async (val, oldVal) => {
-      if (!val.isLeader) return;
-      if (oldVal?.sessionKey && oldVal.sessionKey !== val.sessionKey) {
-        await unsubscribeChat(oldVal.sessionKey);
-      }
-      if (val.sessionKey) {
-        await subscribeChat(val.sessionKey);
-      }
-    },
-    { immediate: true }
-  );
-
-  watch(
-    () => ({
-      chzzkChannelId: chatOptions.value.chzzkChannelId,
-    }),
-    async (val) => {
-      if (!val.chzzkChannelId) {
-        hideLoginError();
-        hideCcidMismatchError();
-        return;
-      }
-
-      async function checkMe() {
-        const response = await $fetch<ChzzkMeResponse | ApiError>(
-          "/api/chzzk/me"
-        );
-        if (response.status === "OK") {
-          if (response.channelId !== val.chzzkChannelId) {
-            showCcidMismatchError();
-            return true;
-          } else {
-            hideCcidMismatchError();
-          }
-          hideLoginError();
-          return true;
-        }
-        return false;
-      }
-
-      try {
-        if (await checkMe()) return;
-      } catch (e) {
-        // First attempt failed, try refreshing token
-      }
-
-      try {
-        await refreshToken();
-        if (await checkMe()) return;
-      } catch (e) {
-        // Refresh failed
-      }
-
-      showLoginError();
-    },
-    { immediate: true }
-  );
-
-  onBeforeUnmount(async () => {
-    if (isLeader.value && sessionKey.value) {
-      await unsubscribeChat(sessionKey.value);
+  async function checkAuth() {
+    if (!chatOptions.value.chzzkChannelId) {
+      hideLoginError();
+      hideCcidMismatchError();
+      return;
     }
-    socketClose();
+
+    async function checkMe() {
+      const response = await $fetch<ChzzkMeResponse | ApiError>(
+        "/api/chzzk/me"
+      );
+      if (response.status === "OK") {
+        if (response.channelId !== chatOptions.value.chzzkChannelId) {
+          hideLoginError();
+          showCcidMismatchError();
+        } else {
+          hideCcidMismatchError();
+          hideLoginError();
+        }
+        return true;
+      }
+      return false;
+    }
+
+    try {
+      if (await checkMe()) return;
+    } catch (e) {
+      // First attempt failed, try refreshing token
+    }
+
+    try {
+      await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
+      if (await checkMe()) return;
+    } catch (e) {
+      // Refresh failed
+    }
+
+    showLoginError();
+  }
+
+  useTimeoutPoll(checkAuth, 60_000, { immediate: true });
+
+  watch(
+    () => chatOptions.value.chzzkChannelId,
+    () => {
+      void checkAuth();
+    }
+  );
+
+  onScopeDispose(() => {
+    void connection.stop();
   });
 
   function clearChat() {
