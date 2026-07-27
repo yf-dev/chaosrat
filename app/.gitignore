@@ -13,6 +13,11 @@ node_modules
 # Test coverage output
 coverage
 
+# Playwright e2e output
+test-results
+playwright-report
+blob-report
+
 # Logs
 logs
 *.log

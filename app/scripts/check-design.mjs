@@ -13,6 +13,15 @@
 // mirrors of one CSS custom property, not independent values, and nothing but
 // this script stops them drifting apart.
 //
+// This is a pre-commit gate (see .husky/pre-commit), so it runs `designmd`
+// from the pinned @google/design.md devDependency, not `npx -y -p
+// @google/design.md`. `npx -y` always resolves whatever is latest on the
+// registry at that moment: an upstream release that adds or tightens a lint
+// rule would start failing every commit in this repo with zero change here,
+// and a cold npx cache would require registry access -- making this the only
+// gate that needs the network when every other one only needs `npm ci` to
+// have run. A pinned local binary is reproducible and fully offline instead.
+//
 // usage: node scripts/check-design.mjs   (from app/, or via `npm run design:check`)
 
 import { execFileSync } from "node:child_process";
@@ -24,6 +33,17 @@ const APP_DIR = dirname(dirname(fileURLToPath(import.meta.url)));
 const REPO_DIR = dirname(APP_DIR);
 const THEMES_DIR = join(APP_DIR, "components/themes");
 const MAIN_CSS = join(APP_DIR, "assets/css/main.css");
+const DESIGNMD_BIN = join(APP_DIR, "node_modules/.bin/designmd");
+
+if (!existsSync(DESIGNMD_BIN)) {
+  console.error(
+    `FAIL  ${DESIGNMD_BIN} not found -- the @google/design.md devDependency ` +
+      "is not installed. Run `npm install` (from app/) and try again. This " +
+      "script deliberately does not fall back to `npx -y`: see the header " +
+      "comment for why that would defeat the point of pinning it.",
+  );
+  process.exit(1);
+}
 
 // Contract custom property -> the token names a theme file may use to mirror it.
 // A theme is free to name its mirror whatever reads best, so match on value.
@@ -54,11 +74,10 @@ for (const spec of specs) {
   const rel = relative(REPO_DIR, spec);
   let out;
   try {
-    out = execFileSync(
-      "npx",
-      ["-y", "-p", "@google/design.md", "designmd", "lint", spec],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-    );
+    out = execFileSync(DESIGNMD_BIN, ["lint", spec], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
   } catch (e) {
     // designmd exits non-zero when it reports an error finding; its JSON is
     // still on stdout and is what we want to show.

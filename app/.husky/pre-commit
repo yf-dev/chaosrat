@@ -32,9 +32,56 @@ npx lint-staged
 echo "==> [pre-commit] running typecheck..."
 npm run typecheck
 
+# Runs unconditionally rather than only when a DESIGN.md or main.css is
+# staged -- one of the failure modes this catches is a theme directory that
+# has NO DESIGN.md at all, and a staged-path filter can never match an
+# absence. It's also whole-project for the same cross-file reason as
+# typecheck above: a theme spec's restated contract values can drift from
+# main.css without either file being in this commit's diff. Fast and fully
+# local (a pinned devDependency, not `npx`), so there's no cost worth an
+# escape hatch for.
+#
+# The two accepted contrast-ratio warnings (cute's nickname strip, video-
+# master's header label) do NOT block this -- only error findings and
+# contract mismatches do. Don't "fix" those warnings thinking they're
+# breaking commits; they're deliberately-accepted design decisions recorded
+# in the theme's own DESIGN.md.
+echo "==> [pre-commit] running design:check..."
+npm run design:check
+
 # NOTE: this runs the test suite against the current working tree, not the
 # strict staged-only snapshot lint-staged normally provides. That's a
 # deliberate, accepted tradeoff (running vitest against a synthetic
 # staged-only checkout would be significantly more complex), not an oversight.
 echo "==> [pre-commit] running test suite..."
 npm run test
+
+# The e2e suite is what stops an unintended *visual* change from shipping:
+# vitest never applies a theme's scoped CSS (vue-test-utils does not inject
+# SFC <style> blocks at all), so a theme can be restyled arbitrarily with the
+# whole unit suite still green. Playwright renders the real overlay in a real
+# browser and diffs both a pixel screenshot and a computed-style fingerprint
+# per theme.
+#
+# This runs unconditionally rather than only when a UI-shaped path is staged,
+# for the same reason typecheck above is whole-project: rendering is
+# cross-file. A change to lib/utils.ts's messageHtml(), to a shared token in
+# assets/css/main.css, or to ChatOverlay.vue's theme switch all change what a
+# theme looks like without touching components/themes/. Any staged-path filter
+# would have to enumerate those, and that enumeration rots the moment someone
+# adds a file. The whole suite runs in well under a minute against an already
+# warm dev server, so there is no tradeoff worth buying with a hole.
+#
+# Playwright's `webServer` starts `npm run dev` itself when nothing is on
+# :3000 and reuses an already-running dev server otherwise, so this needs no
+# setup either way -- the first commit of a session just pays the Nuxt boot.
+#
+# Escape hatch: `SKIP_E2E=1 git commit ...` when you knowingly need to skip
+# (e.g. no browser available). Snapshots are refreshed with
+# `npm run test:e2e:update` -- review that diff, never re-baseline blindly.
+if [[ "${SKIP_E2E-0}" == "1" ]]; then
+  echo "==> [pre-commit] SKIP_E2E=1 set, skipping e2e/visual suite" >&2
+else
+  echo "==> [pre-commit] running e2e + visual snapshot suite..."
+  npm run test:e2e
+fi
