@@ -94,12 +94,29 @@ export function encodeFormatString(
   };
 }
 
+/**
+ * Escape a string for safe interpolation into a double-quoted HTML attribute.
+ *
+ * `&` must be escaped first, otherwise the `&` produced by escaping `"`, `<`
+ * and `>` would itself get escaped again.
+ *
+ * @param str - The string to escape
+ * @returns The escaped string
+ */
+function escapeHtmlAttribute(str: string): string {
+  return str
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
 function emojiToTag(emojiUrl: string): string {
-  return `<img class="emoji" src="${emojiUrl}" />`;
+  return `<img class="emoji" src="${escapeHtmlAttribute(emojiUrl)}" />`;
 }
 
 function stickerToTag(stickerUrl: string): string {
-  return `<img class="sticker" src="${stickerUrl}" />`;
+  return `<img class="sticker" src="${escapeHtmlAttribute(stickerUrl)}" />`;
 }
 
 export function messageHtml(

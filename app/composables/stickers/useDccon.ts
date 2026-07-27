@@ -25,15 +25,23 @@ export function useDccon(dcconUrl: MaybeRefOrGetter<string | null>) {
     if (!url) {
       return;
     }
-    const data = await $fetch<DcconData | DcconError>(url, {
-      timeout: 1000,
-    });
-    if ("message" in data) {
-      console.error(`Dccon Error: ${data.message}`);
-      return;
+    try {
+      const data = await $fetch<DcconData | DcconError>(url, {
+        timeout: 10000,
+      });
+      if ("message" in data) {
+        console.error(`Dccon Error: ${data.message}`);
+        return;
+      }
+      if (!Array.isArray(data.dccons)) {
+        console.error(`Dccon Error: malformed dccon data from ${url}`);
+        return;
+      }
+      console.log(`Dccon: ${url} loaded`);
+      dcconData.value = data;
+    } catch (error) {
+      console.error(`Dccon Error: failed to fetch ${url}: ${error}`);
     }
-    console.log(`Dccon: ${url} loaded`);
-    dcconData.value = data;
   }
 
   watch(

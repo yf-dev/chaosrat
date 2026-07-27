@@ -570,6 +570,86 @@ describe("createChzzkConnection", () => {
     await conn.stop();
   });
 
+  it("19. isRunning() reflects the running state across start()/stop()", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    expect(conn.isRunning()).toBe(false);
+
+    conn.start();
+    expect(conn.isRunning()).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(conn.isRunning()).toBe(true);
+
+    await conn.stop();
+    expect(conn.isRunning()).toBe(false);
+  });
+
+  it("20. a fetchSessionUrl() that throws (instead of rejecting cleanly) is treated as an ERROR result and backs off", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockImplementationOnce(() => {
+      throw new Error("synchronous boom");
+    });
+    h.fetchSessionUrl.mockResolvedValueOnce({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // First cycle's fetchSessionUrl() throw is swallowed by
+    // safeFetchSessionUrl(), producing an ERROR result -> scheduleRetry().
+    expect(h.createSocket).not.toHaveBeenCalled();
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(timings.retryBaseDelay);
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(2);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+  });
+
+  it("21. a refreshToken() that throws is treated as a failed refresh, keeping onAuthRequired(true)", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "UNAUTHORIZED" });
+    h.refreshToken.mockImplementationOnce(() => {
+      throw new Error("synchronous boom");
+    });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.onAuthRequired).toHaveBeenLastCalledWith(true);
+    expect(h.createSocket).not.toHaveBeenCalled();
+
+    await conn.stop();
+  });
+
+  it("22. a subscribeChat() that throws is treated as a failed subscribe, triggering the same backoff as an explicit false", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    h.subscribeChat.mockRejectedValueOnce(new Error("subscribe boom"));
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const firstSocket = h.latestSocket();
+
+    firstSocket.handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    // Let handleSubscribe()'s subscribeChat() rejection settle.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // A failed subscribe (whether via throw or an explicit `false`) must
+    // tear down the socket and back off for another attempt, exactly like
+    // handleSocketFailure() elsewhere.
+    expect(firstSocket.close).toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(timings.retryBaseDelay);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+  });
+
   it("18. stop() triggers no further fetchSessionUrl calls even when the socket's close() synchronously fires onDisconnect", async () => {
     const h = createHarness();
     h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
@@ -592,5 +672,189 @@ describe("createChzzkConnection", () => {
 
     await vi.advanceTimersByTimeAsync(10 * 60 * 60 * 1000);
     expect(h.fetchSessionUrl).toHaveBeenCalledTimes(callsBeforeStop);
+  });
+
+  it("23. uses the documented default timings (1s retry base, 6h token refresh) when no timings override is given", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValueOnce({ status: "ERROR" });
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps); // no `timings` arg -> defaults
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(1);
+
+    // Default retryBaseDelay is 1000ms, not less.
+    await vi.advanceTimersByTimeAsync(999);
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(2);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // Default tokenRefreshInterval is 6 hours.
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60 * 1000);
+    expect(h.refreshToken).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+  });
+
+  it("24. stop() called while the first fetchSessionUrl() is still pending prevents that stale result from opening a socket", async () => {
+    const h = createHarness();
+    let resolveFetch!: (v: SessionUrlResult) => void;
+    h.fetchSessionUrl.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveFetch = res;
+        }),
+    );
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+    resolveFetch({ status: "OK", url: "wss://late" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.createSocket).not.toHaveBeenCalled();
+  });
+
+  it("25. stop() called while refreshToken() is still pending (after an UNAUTHORIZED result) prevents any further action", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "UNAUTHORIZED" });
+    let resolveRefresh!: (v: boolean) => void;
+    h.refreshToken.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveRefresh = res;
+        }),
+    );
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.refreshToken).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+    resolveRefresh(true);
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Must not fetch a second session URL, nor open a socket, after being
+    // stopped mid-refresh.
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(1);
+    expect(h.createSocket).not.toHaveBeenCalled();
+  });
+
+  it("26. stop() called while the post-refresh fetchSessionUrl() is still pending prevents that stale result from opening a socket", async () => {
+    const h = createHarness();
+    let resolveSecondFetch!: (v: SessionUrlResult) => void;
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "UNAUTHORIZED" })
+      .mockImplementationOnce(
+        () =>
+          new Promise((res) => {
+            resolveSecondFetch = res;
+          }),
+      );
+    h.refreshToken.mockResolvedValue(true);
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+    resolveSecondFetch({ status: "OK", url: "wss://late" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.createSocket).not.toHaveBeenCalled();
+  });
+
+  it("27. stop() called while subscribeChat() is still pending prevents a stale subscribe result from scheduling a retry", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    let resolveSubscribe!: (v: boolean) => void;
+    h.subscribeChat.mockImplementation(
+      () =>
+        new Promise((res) => {
+          resolveSubscribe = res;
+        }),
+    );
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = h.latestSocket();
+    socket.handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.subscribeChat).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+    resolveSubscribe(false); // a late, failed subscribe result
+    await vi.advanceTimersByTimeAsync(timings.retryMaxDelay * 2);
+
+    // Must not fetch a second session URL after being stopped, even though
+    // the stale subscribe "failed".
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("28. SYSTEM 'subscribed'/'unsubscribed' messages are forwarded via onEvent with no other side effect", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = h.latestSocket();
+    // connectCycle()'s own success path already called onAuthRequired(false)
+    // once during start() -- clear it so the assertion below is about the
+    // "subscribed" message specifically, not connection setup.
+    h.onAuthRequired.mockClear();
+
+    const subscribedMessage = {
+      type: "subscribed" as const,
+      data: { eventType: "CHAT" as const, channelId: "ch1" },
+    };
+    socket.handlers.onMessage("SYSTEM", JSON.stringify(subscribedMessage));
+
+    expect(h.onEvent).toHaveBeenCalledWith({
+      type: "SYSTEM",
+      message: subscribedMessage,
+    });
+    expect(h.subscribeChat).not.toHaveBeenCalled();
+    expect(h.onAuthRequired).not.toHaveBeenCalled();
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+  });
+
+  it("29. calling start() while already running is a no-op (idempotent)", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(1);
+
+    conn.start(); // second call while already running
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.fetchSessionUrl).toHaveBeenCalledTimes(1);
+    expect(conn.isRunning()).toBe(true);
+
+    await conn.stop();
+  });
+
+  it("30. calling stop() when never started is a no-op (does not throw, never touches unsubscribeChat/closeSocket)", async () => {
+    const h = createHarness();
+    const conn = createChzzkConnection(h.deps, timings);
+
+    await expect(conn.stop()).resolves.toBeUndefined();
+
+    expect(conn.isRunning()).toBe(false);
+    expect(h.unsubscribeChat).not.toHaveBeenCalled();
+    expect(h.fetchSessionUrl).not.toHaveBeenCalled();
   });
 });

@@ -18,7 +18,12 @@ export default defineEventHandler(
       }
       const url = new URL(event.node.req.url, "https://www.youtube.com");
       url.pathname = event.context.params.path;
-      return proxyRequest(event, url.toString(), {
+      // Must be awaited: proxyRequest()'s rejection (e.g. upstream fetch
+      // failure) otherwise escapes this try block entirely, since `return
+      // aPromise` from inside a try does not run the promise under the
+      // try/catch — it just hands the promise up to be adopted by this
+      // async function's own return.
+      return await proxyRequest(event, url.toString(), {
         headers: {
           host: url.host,
           origin: url.origin,

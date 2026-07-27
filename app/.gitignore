@@ -10,6 +10,9 @@ dist
 # Node dependencies
 node_modules
 
+# Test coverage output
+coverage
+
 # Logs
 logs
 *.log

@@ -1,0 +1,238 @@
+import { installH3Globals, createMockEvent } from "./h3TestHelpers";
+
+// refresh.ts keeps its single-flight collapsing map at module scope, so each
+// test gets a fresh module instance (and thus a fresh, empty flight) via
+// resetModules + a fresh dynamic import. Otherwise a cached/in-flight entry
+// from one test would leak into the next.
+beforeEach(() => {
+  vi.resetModules();
+  installH3Globals();
+});
+
+describe("server/api/chzzk/auth/refresh", () => {
+  it("returns no_refresh_token without calling upstream when the cookie is absent", async () => {
+    const fetchMock = vi.fn();
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+    const { event } = createMockEvent({ url: "/api/chzzk/auth/refresh" });
+
+    const result = await handler(event);
+
+    expect(result).toEqual({
+      status: "ERROR",
+      code: "no_refresh_token",
+      error: "No refresh token found",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("exchanges the refresh token and writes all three cookies on success", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      code: 200,
+      message: null,
+      content: {
+        accessToken: "new-at",
+        refreshToken: "new-rt",
+        tokenType: "Bearer",
+        expiresIn: 3600,
+        scope: "chat",
+      },
+    });
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+    const { event, getResponseHeader } = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      headers: { cookie: "chzzk_refresh_token=rt-solo" },
+    });
+
+    const result = await handler(event);
+
+    expect(result).toEqual({ status: "OK" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/auth/v1/token",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          grantType: "refresh_token",
+          refreshToken: "rt-solo",
+        }),
+      }),
+    );
+
+    const setCookieHeader = getResponseHeader("set-cookie") as string[];
+    expect(
+      setCookieHeader.some((c) => c.startsWith("chzzk_access_token=new-at")),
+    ).toBe(true);
+    expect(
+      setCookieHeader.some((c) => c.startsWith("chzzk_refresh_token=new-rt")),
+    ).toBe(true);
+    expect(
+      setCookieHeader.some((c) => c.startsWith("chzzk_token_created_at=")),
+    ).toBe(true);
+  });
+
+  it("collapses concurrent requests sharing the same (single-use) refresh token into one upstream exchange, and still writes cookies for every caller", async () => {
+    let resolveFetch!: (value: unknown) => void;
+    const fetchPromise = new Promise((resolve) => {
+      resolveFetch = resolve;
+    });
+    const fetchMock = vi.fn().mockReturnValue(fetchPromise);
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+
+    const call1 = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      headers: { cookie: "chzzk_refresh_token=rt-shared" },
+    });
+    const call2 = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      headers: { cookie: "chzzk_refresh_token=rt-shared" },
+    });
+
+    const p1 = handler(call1.event);
+    const p2 = handler(call2.event);
+
+    // Let both calls reach refreshFlight.run() (and join the same in-flight
+    // promise) before the upstream call resolves.
+    await new Promise((r) => setImmediate(r));
+    resolveFetch({
+      code: 200,
+      message: null,
+      content: {
+        accessToken: "new-at",
+        refreshToken: "new-rt",
+        tokenType: "Bearer",
+        expiresIn: 3600,
+        scope: "chat",
+      },
+    });
+
+    const [r1, r2] = await Promise.all([p1, p2]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(r1).toEqual({ status: "OK" });
+    expect(r2).toEqual({ status: "OK" });
+
+    for (const call of [call1, call2]) {
+      const setCookieHeader = call.getResponseHeader("set-cookie") as
+        string[] | undefined;
+      expect(setCookieHeader).toBeDefined();
+      expect(
+        setCookieHeader!.some((c) => c.startsWith("chzzk_access_token=new-at")),
+      ).toBe(true);
+      expect(
+        setCookieHeader!.some((c) =>
+          c.startsWith("chzzk_refresh_token=new-rt"),
+        ),
+      ).toBe(true);
+      expect(
+        setCookieHeader!.some((c) => c.startsWith("chzzk_token_created_at=")),
+      ).toBe(true);
+    }
+  });
+
+  it("does not collapse requests carrying distinct refresh tokens", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(
+        (
+          _url: string,
+          opts: { body: { refreshToken: string } },
+        ): Promise<unknown> =>
+          Promise.resolve({
+            code: 200,
+            message: null,
+            content: {
+              accessToken: `at-for-${opts.body.refreshToken}`,
+              refreshToken: `rt2-for-${opts.body.refreshToken}`,
+              tokenType: "Bearer",
+              expiresIn: 3600,
+              scope: "chat",
+            },
+          }),
+      );
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+
+    const callA = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      headers: { cookie: "chzzk_refresh_token=rt-A" },
+    });
+    const callB = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      headers: { cookie: "chzzk_refresh_token=rt-B" },
+    });
+
+    await Promise.all([handler(callA.event), handler(callB.event)]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns invalid_token when the upstream response is missing required fields", async () => {
+    globalThis.$fetch = vi.fn().mockResolvedValue({
+      code: 200,
+      message: null,
+      content: undefined,
+    }) as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+    const { event } = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      headers: { cookie: "chzzk_refresh_token=rt-bad" },
+    });
+
+    const result = await handler(event);
+
+    expect(result).toEqual({
+      status: "ERROR",
+      code: "invalid_token",
+      error: "Failed to refresh Chzzk access token",
+    });
+  });
+
+  it("returns invalid_token when the upstream exchange throws", async () => {
+    globalThis.$fetch = vi
+      .fn()
+      .mockRejectedValue(
+        new Error("network down"),
+      ) as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+    const { event } = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      headers: { cookie: "chzzk_refresh_token=rt-bad" },
+    });
+
+    const result = await handler(event);
+
+    expect(result).toEqual({
+      status: "ERROR",
+      code: "invalid_token",
+      error: "Failed to refresh Chzzk access token",
+    });
+  });
+
+  it("returns internal_server_error when something inside the handler throws, outside the inner refresh try/catch", async () => {
+    globalThis.$fetch = vi.fn() as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+    const { event } = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      headers: { cookie: "chzzk_refresh_token=rt-bad" },
+    });
+    globalThis.useRuntimeConfig = vi.fn(() => {
+      throw new Error("config boom");
+    }) as unknown as typeof globalThis.useRuntimeConfig;
+
+    const result = await handler(event);
+
+    expect(result).toEqual({
+      status: "ERROR",
+      code: "internal_server_error",
+      error: "Internal Server Error",
+    });
+  });
+});

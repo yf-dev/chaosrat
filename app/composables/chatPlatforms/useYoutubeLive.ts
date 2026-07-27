@@ -181,7 +181,13 @@ function updateUrl(url: string | URL): string | URL {
     url = new URL(url);
   }
   if (url.origin === "https://www.youtube.com") {
-    url = `/api/youtubeLive/proxy/${url.pathname}${url.search}`;
+    // `url.pathname` already starts with "/", so no extra "/" is inserted
+    // here (that would produce a doubled slash after "proxy"). Verified
+    // that a leading vs. non-leading slash in the resulting path is
+    // normalised identically by the URL parser used server-side in
+    // server/api/youtubeLive/proxy/[...path].ts, so this does not change
+    // the upstream URL that is ultimately requested.
+    url = `/api/youtubeLive/proxy${url.pathname}${url.search}`;
   }
   return url;
 }

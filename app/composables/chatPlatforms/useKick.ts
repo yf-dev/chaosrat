@@ -1,5 +1,5 @@
 import { useTimeoutPoll, useWebSocket } from "@vueuse/core";
-import type { ChatItem } from "~/lib/interfaces";
+import type { ChatItem, ChatPlatformError } from "~/lib/interfaces";
 import { parseIntOrDefault } from "~/lib/utils";
 
 interface KickGetChannelApiResponse {
@@ -25,6 +25,11 @@ interface KickWebsocketMessage {
   // JSON.parse()'d again into the concrete per-event-type shape below.
   data: string;
   channel?: string;
+}
+
+interface KickWebsocketErrorEventData {
+  code: number;
+  message: string;
 }
 
 interface KickWebsocketChatMessageEventData {
@@ -137,6 +142,7 @@ export function useKick(options: {
   const chatOptionsStore = useChatOptionsStore();
   const { chatOptions } = storeToRefs(chatOptionsStore);
   const messages = ref<KickMessage[]>([]);
+  const errors = ref<ChatPlatformError[]>([]);
 
   const chatItems = computed(() => {
     return messages.value.map((message) => {
@@ -189,7 +195,15 @@ export function useKick(options: {
     open: webSocketOpen,
     close: webSocketClose,
   } = useWebSocket(
-    "wss://ws-us2.pusher.com/app/eb1d5f283081a78b932c?protocol=7&client=js&version=7.6.0&flash=false",
+    // Undocumented, private Pusher endpoint that Kick's own web frontend uses
+    // to deliver chat -- Kick has no public API for this (see docs.kick.com,
+    // which offers chat only via webhooks: `chat.message.sent`, requiring app
+    // registration + broadcaster OAuth + a public HTTPS endpoint -- a much
+    // larger, separate piece of work). This app key/version was captured live
+    // from Kick's own frontend on 2026-07-27. Kick rotates this without
+    // notice, and this exact failure (stale app key -> silent reconnect loop)
+    // has already happened once.
+    "wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.5.0&flash=false",
     {
       autoReconnect: true,
       heartbeat: {
@@ -223,6 +237,20 @@ export function useKick(options: {
     webSocketOpen();
   }
 
+  function showPusherError(code: number, message: string) {
+    if (errors.value.find((error) => error.id === "kick-pusher-error")) {
+      return;
+    }
+    errors.value.push({
+      id: "kick-pusher-error",
+      platform: "kick",
+      message: `Kick 채팅 연결이 끊어졌습니다 (Pusher 오류 코드 ${code}: ${message}). 이 메시지를 클릭해 새로고침하세요.`,
+      onClick: () => {
+        window.location.reload();
+      },
+    });
+  }
+
   function onMessage() {
     if (webSocketData.value === null) {
       return;
@@ -233,6 +261,19 @@ export function useKick(options: {
       webSocketSend(
         `{"event":"pusher:subscribe","data":{"auth":"","channel":"chatrooms.${kickChatroomId.value}.v2"}}`,
       );
+    }
+    if (message.event === "pusher:error") {
+      const data: KickWebsocketErrorEventData = JSON.parse(message.data);
+      console.error(`Kick Pusher error ${data.code}: ${data.message}`);
+      // Pusher close codes: 4000-4099 = fatal, do not reconnect; 4100-4199 =
+      // reconnect after backoff; 4200-4299 = reconnect immediately. Only the
+      // fatal range is handled here -- closing explicitly (rather than
+      // relying on autoReconnect) is what stops useWebSocket from retrying,
+      // since it only reconnects when the socket wasn't explicitly closed.
+      if (data.code >= 4000 && data.code <= 4099) {
+        showPusherError(data.code, data.message);
+        webSocketClose();
+      }
     }
     if (message.event === "App\\Events\\ChatMessageEvent") {
       console.log("Kick chat");
@@ -293,5 +334,6 @@ export function useKick(options: {
   return {
     chatItems,
     clearChat,
+    errors,
   };
 }

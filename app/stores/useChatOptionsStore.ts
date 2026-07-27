@@ -1,6 +1,39 @@
 import type { ChatOptions, ChatTheme, SoundEffectType } from "~/lib/interfaces";
 import { decodeUrlSafeBase64, parseIntOrDefault } from "~/lib/utils";
 
+// The URL builder (`pages/index.vue`) only ever emits a boolean flag by
+// setting it to the literal string "true", or by omitting the key entirely
+// when it's off -- it never writes "false". So for builder-generated URLs,
+// "missing" and "true" are the only shapes that matter, and both must keep
+// working exactly as before. This also treats a hand-written `=false` or
+// `=0` as false (previously `!!"false"` was `true`, the actual defect), and
+// any other non-empty string (including a bare `?flag` with no value, which
+// vue-router reports as `null`) falls back to the pre-existing "truthy
+// string wins" behaviour.
+function parseBooleanFlag(value: string | null | undefined): boolean {
+  if (value === "false" || value === "0") {
+    return false;
+  }
+  return !!value;
+}
+
+// `decodeUrlSafeBase64` never throws on malformed base64 -- it just returns
+// a garbled string. That garbled string (or a validly-decoded but
+// syntactically invalid regex source) used to flow straight through to
+// `ChatOverlay.vue`'s `new RegExp(...)`, which has no try/catch, crashing
+// the overlay on mount. Validate here, at the boundary where untrusted URL
+// input enters the app, so any consumer can safely treat `undefined` as "no
+// filter".
+function decodeValidRegexSource(value: string): string | undefined {
+  const decoded = decodeUrlSafeBase64(value);
+  try {
+    new RegExp(decoded);
+  } catch {
+    return undefined;
+  }
+  return decoded;
+}
+
 export const useChatOptionsStore = defineStore("chatOptions", () => {
   const route = useRoute();
 
@@ -68,12 +101,12 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       if (!route.query.hiddenUsernameRegex[0]) {
         return undefined;
       }
-      return decodeUrlSafeBase64(route.query.hiddenUsernameRegex[0]);
+      return decodeValidRegexSource(route.query.hiddenUsernameRegex[0]);
     }
     if (!route.query.hiddenUsernameRegex) {
       return undefined;
     }
-    return decodeUrlSafeBase64(route.query.hiddenUsernameRegex);
+    return decodeValidRegexSource(route.query.hiddenUsernameRegex);
   });
 
   const hiddenMessageRegex = computed<string | undefined>(() => {
@@ -81,12 +114,12 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       if (!route.query.hiddenMessageRegex[0]) {
         return undefined;
       }
-      return decodeUrlSafeBase64(route.query.hiddenMessageRegex[0]);
+      return decodeValidRegexSource(route.query.hiddenMessageRegex[0]);
     }
     if (!route.query.hiddenMessageRegex) {
       return undefined;
     }
-    return decodeUrlSafeBase64(route.query.hiddenMessageRegex);
+    return decodeValidRegexSource(route.query.hiddenMessageRegex);
   });
 
   const soundEffectType = computed<SoundEffectType | undefined>(() => {
@@ -132,16 +165,16 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
 
   const isUseOpenDcconSelector = computed<boolean | undefined>(() => {
     if (Array.isArray(route.query.isUseOpenDcconSelector)) {
-      return !!route.query.isUseOpenDcconSelector[0];
+      return parseBooleanFlag(route.query.isUseOpenDcconSelector[0]);
     }
-    return !!route.query.isUseOpenDcconSelector;
+    return parseBooleanFlag(route.query.isUseOpenDcconSelector);
   });
 
   const isHidePlatformIcon = computed<boolean | undefined>(() => {
     if (Array.isArray(route.query.isHidePlatformIcon)) {
-      return !!route.query.isHidePlatformIcon[0];
+      return parseBooleanFlag(route.query.isHidePlatformIcon[0]);
     }
-    return !!route.query.isHidePlatformIcon;
+    return parseBooleanFlag(route.query.isHidePlatformIcon);
   });
 
   const chatOptions = ref<ChatOptions>({

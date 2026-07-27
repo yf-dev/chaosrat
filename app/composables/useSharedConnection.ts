@@ -139,10 +139,16 @@ export function useSharedConnection<T>(
         });
         elector.value = thisElector;
 
-        // Handle duplicate leaders
-        thisElector.onduplicate = () => {
-          console.warn("Duplicate leaders detected!");
-        };
+        // No `onduplicate` handler here on purpose: `broadcast-channel`'s
+        // `createLeaderElection()` picks the WebLock-based elector whenever
+        // `navigator.locks` exists (see `supportsWebLockAPI()` in
+        // `broadcast-channel/dist/lib/leader-election.js`), which covers
+        // every environment this app targets -- OBS's Chromium/CEF Browser
+        // Source and Node in tests alike. On that elector, `onduplicate`'s
+        // setter is a documented no-op ("Do nothing because there are no
+        // duplicates in the WebLock version",
+        // `leader-election-web-lock.js`), since duplicates cannot occur
+        // there. Do not re-add it.
 
         // Wait for leadership. Guard against this resolving (or rejecting)
         // after this tab has already been torn down -- e.g. the channel

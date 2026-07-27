@@ -34,6 +34,31 @@ async function waitFor(
 }
 
 describe("useSharedConnection", () => {
+  it("does nothing (no channel/elector, never becomes leader) when channelName is undefined", async () => {
+    const onBecomeLeader = vi.fn();
+    const scope = effectScope();
+
+    const inst = scope.run(() =>
+      useSharedConnection<number>(undefined, {
+        onData: () => {},
+        onBecomeLeader,
+        type: "simulate",
+        electionOptions: FAST_ELECTION,
+      }),
+    )!;
+
+    try {
+      // Give it as much time as a real election would take, to prove this
+      // isn't just "hasn't happened yet".
+      await sleep(50);
+
+      expect(inst.isLeader.value).toBe(false);
+      expect(onBecomeLeader).not.toHaveBeenCalled();
+    } finally {
+      scope.stop();
+    }
+  });
+
   it("a single tab wins leadership exactly once", async () => {
     const channelName = uniqueChannelName();
     const onBecomeLeader = vi.fn();

@@ -118,6 +118,35 @@ describe("createSingleFlight", () => {
     expect(fn2).toHaveBeenCalledTimes(1);
   });
 
+  it("treats an entry that expires between the sweep and the freshness check as expired, not stale-cached", async () => {
+    // sweepExpired() and the `cached.expiresAt > Date.now()` check both call
+    // Date.now() within the same synchronous run() call. If time is read as
+    // having advanced between those two calls (e.g. a millisecond boundary),
+    // an entry can survive the sweep (not yet `<=` the sweep's `now`) but
+    // still fail the freshness check moments later -- run() must delete it
+    // and recompute rather than serving it as if it were still fresh.
+    const flight = createSingleFlight<string>({ cacheMs: 1_000 });
+    const fn1 = vi.fn(() => Promise.resolve("first"));
+    const nowSpy = vi.spyOn(Date, "now");
+
+    nowSpy.mockReturnValue(0);
+    const first = await flight.run("key", fn1);
+    expect(first).toBe("first");
+    // entry.expiresAt === 1000
+
+    const fn2 = vi.fn(() => Promise.resolve("second"));
+    // sweepExpired() sees now=999 (entry.expiresAt=1000 is not <= 999, so it
+    // survives the sweep), but the freshness check right after sees now=1000
+    // (not > 1000), so the entry must be treated as expired.
+    nowSpy.mockReturnValueOnce(999).mockReturnValue(1000);
+    const second = await flight.run("key", fn2);
+
+    expect(second).toBe("second");
+    expect(fn2).toHaveBeenCalledTimes(1);
+
+    nowSpy.mockRestore();
+  });
+
   it("evicts expired entries even when their key is never looked up again (no unbounded cache growth)", async () => {
     // Models the real caller: keys are one-shot CHZZK refresh-token values,
     // so an expired entry's key is never queried again and must not linger

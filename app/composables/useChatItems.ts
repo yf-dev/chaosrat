@@ -45,7 +45,11 @@ export function useChatItems(options: ChatItemsOptions) {
     useYoutubeLive({
       onBroadcasterMessage: onBroadcasterMessage,
     });
-  const { chatItems: kickChatItems, clearChat: kickClearChat } = useKick({
+  const {
+    chatItems: kickChatItems,
+    clearChat: kickClearChat,
+    errors: kickErrors,
+  } = useKick({
     onBroadcasterMessage: onBroadcasterMessage,
   });
 
@@ -62,7 +66,7 @@ export function useChatItems(options: ChatItemsOptions) {
   });
 
   const errors = computed(() => {
-    return [...chzzkErrors.value];
+    return [...chzzkErrors.value, ...kickErrors.value];
   });
 
   const latestChatTimestamp = ref<number>(0);

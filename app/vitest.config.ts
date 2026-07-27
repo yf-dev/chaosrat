@@ -8,6 +8,26 @@ const appRoot = fileURLToPath(new URL("./", import.meta.url));
 
 export default defineConfig({
   test: {
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      include: [
+        "lib/**",
+        "composables/**",
+        "stores/**",
+        "server/**",
+        "components/**",
+        "pages/**",
+      ],
+      // v8's coverage.include is matched with picomatch's `contains: true`
+      // (vitest resolves paths this way, not anchored globbing), so a
+      // pattern like "server/**" matches *any* path with a "server/"
+      // segment anywhere in it -- including test/unit/server/h3TestHelpers.ts
+      // (a test helper, not app code) and, if ever executed, files under
+      // the generated .nuxt/.output trees (e.g. ".nuxt/dist/server/...").
+      // Exclude those explicitly rather than narrowing `include`.
+      exclude: ["test/**", ".nuxt/**", ".output/**"],
+    },
     projects: [
       {
         resolve: {
@@ -20,7 +40,7 @@ export default defineConfig({
           name: "unit",
           globals: true,
           environment: "node",
-          include: ["test/unit/*.test.ts"],
+          include: ["test/unit/**/*.test.ts"],
         },
       },
       await defineVitestProject({
@@ -28,7 +48,7 @@ export default defineConfig({
           name: "nuxt",
           globals: true,
           environment: "nuxt",
-          include: ["test/nuxt/*.test.ts"],
+          include: ["test/nuxt/**/*.test.ts"],
         },
       }),
     ],
