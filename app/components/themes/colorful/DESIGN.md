@@ -26,6 +26,14 @@ spacing:
   # single source of truth.
   icon: 1.8rem
   sticker: 10rem
+motion:
+  # Scoped to this theme's own .chat-container in ColorfulChatList.vue, like
+  # every other token group in this file -- see the Motion section for why
+  # this round's values match every other theme's without being a shared
+  # token (root DESIGN.md contract rule 6/9).
+  duration: 200ms
+  ease: "cubic-bezier(0.22, 1, 0.36, 1)"
+  slide: 1.2rem
 components:
   message-card:
     backgroundColor: "{colors.primary}"
@@ -68,10 +76,11 @@ stocks four roll colors, so it always lands on one of exactly four hues,
 never a custom-mixed one, and gaffer tape is always printed in thick black
 marker regardless of the tape color, which is why `{colors.on-tag}` never
 varies. Both the case and the label were put down by hand, not a machine:
-the case sits at `rotateZ(-3deg)`, the label at a _different_
-`rotateZ(-2deg)` and pulled up and to the left with `translate(-0.6rem,
-0.6rem)` so it overhangs the case's top-left corner like a real sticker
-would. Nothing here is aligned to a grid, and that is the entire point —
+the case sits at a `-3deg` rotation (see Layout for why this is expressed
+with the independent `rotate:` property rather than `transform:`), the
+label at a _different_ `transform: rotateZ(-2deg)` and pulled up and to the
+left with `translate(-0.6rem, 0.6rem)` so it overhangs the case's top-left
+corner like a real sticker would. Nothing here is aligned to a grid, and that is the entire point —
 a perfectly squared label would read as printed, not applied. The lettering
 on the tape is `{typography.overlay-display}`, **ONE-Mobile-POP**, a
 rounded, heavy, single-weight Korean poster face with no bold cut, which is
@@ -142,6 +151,17 @@ is why they are **not** tokenized here — folding them into
 means elsewhere, and they don't; leave that translate exactly as two raw
 numbers in `ColorfulChatList.vue`.
 
+The case's own `-3deg` tilt is `.item`'s rotation. `.item` is no longer the
+direct `TransitionGroup` child — `.motion-slot` (see Motion) is, and it is
+`.motion-slot` that receives FLIP's inline `transform` today — but `.item`
+still expresses its tilt with the independent `rotate: -3deg;` property
+rather than `transform: rotateZ(-3deg);`, both to render identically to the
+old declaration and as a hedge: `rotate:` composes with any inline
+`transform` a future refactor might reintroduce on `.item` itself, where a
+class-based `transform:` would silently be clobbered. The label
+(`.nickname-box`) is not a `TransitionGroup` child either way and keeps its
+`transform: rotateZ(-2deg) translate(-0.6rem, 0.6rem)` exactly as before.
+
 Internal spacing runs on two real tokens plus one value that is
 deliberately not a token. `{spacing.pad}` (`0.8rem`, CSS `--pad`) is
 `{components.message-card.padding}` and reused for the label's own
@@ -211,13 +231,71 @@ this theme must never override it locally. `{components.sticker}` mirrors
 `--chat-sticker-size` (`{spacing.sticker}`, `10rem`) the same way, for
 the same reason.
 
+## Motion
+
+A gaffer-tape label doesn't fade in — it gets slapped onto the case by a
+stagehand in a hurry, the way a hand-applied sticker lands with a bit of
+momentum rather than materializing in place. `ColorfulChatList.vue` renders
+through `useChatListMotion()`'s `listTag`/`listProps`, so a new case rises
+`{motion.slide}` (`1.2rem`) from below while fading in over
+`{motion.duration}` (`200ms`, `{motion.ease}`), and a removed one continues
+that same upward motion while fading out — as if peeled off and tossed,
+rather than deleted. The offset is expressed with the independent
+`translate:` property rather than `transform:`, for the same reason
+`.item`'s tilt is (see Layout): `TransitionGroup`'s FLIP move writes its
+own inline `transform`, which would clobber a class-based `transform:`
+instead of composing with it.
+
+Enter, leave, **and** the reflow-follow (`.chat-move`) all animate now.
+`TransitionGroup`'s FLIP move writes a purely vertical inline
+`transform: translate(0, dy)` on its direct child to reposition a shifted
+item; if `.item` — which carries the `-3deg` tilt — were that direct child,
+the vertical delta would apply _inside_ the rotated frame and pick up a
+horizontal component of `dy * tan(3deg)`. With a tall message stack `dy`
+reaches several hundred px, which previously swung the case tens of px
+sideways and off a narrow OBS source. This was measured against a real
+failure, not assumed: a moving item's inline style was
+`transform: matrix(1, 0, 0, 1, 3.56, 203.95)`, and `3.56 / 203.95 = tan(1deg)`
+exactly, for the smaller `-1deg` tilt in `cute` — this theme's `-3deg` has
+roughly three times the swing for the same `dy`.
+
+The fix, not a re-tuned number: a wrapper element, `.motion-slot`, now sits
+between `.list` and `.item` in `ColorfulChatList.vue`'s template and carries
+**no styling of its own**. `TransitionGroup`'s `:key` moved from `.item` to
+`.motion-slot`, making the wrapper — not the rotated case — the element FLIP
+writes its inline `transform` onto; `.item`'s own `rotate: -3deg` sits one
+level deeper and never receives that inline style, so `.chat-move`'s
+`transition: transform ...` now animates a plain, un-rotated box with no
+`tan(theta)` term to introduce drift. The layout is unchanged without the
+wrapper carrying any styling of its own: `.list` is a block formatting
+context (it's absolutely positioned), so `.item`'s
+`margin: 1.4rem var(--pad)` collapses _through_ the styleless
+`.motion-slot` exactly as if `.item` sat directly in `.list` — adjacent
+slots still collapse to the same 1.4rem gap, and the slot's own border box
+coincides with `.item`'s. Block width is likewise unchanged: the slot is
+`auto`-width (matching `.list`) and `.item` resolves to the same width
+inside it as it did as a direct child. Do not give `.motion-slot` any
+margin, padding, border, or other BFC-establishing property — any of those
+would break the parent/child margin collapsing this relies on.
+
+`isDisableAnimation` removes the `<TransitionGroup>` entirely (the
+composable swaps in a plain `<div>`), not just its transition durations —
+a broadcaster who wants a static wall of cases gets exactly that, not a
+faster version of the slap-on motion. `prefers-reduced-motion: reduce`
+takes the middle path: the transition still runs, but collapses to a
+near-instant (`1ms`) cut with no slide, so the case list still updates for
+a viewer whose OS setting asks for stillness without a second, separate
+"no transition" mechanism.
+
 ## Do's and Don'ts
 
 - Do keep the tape palette at exactly four entries — the fixed set, not a
   hash-to-hue wheel, is the point of this theme's nickname system.
 - Do rotate the case and its label at two _different_ angles; matching
   angles would make the label look glued flush instead of stuck on by
-  hand.
+  hand. Do keep the case's own tilt on the independent `rotate:` property
+  (not `transform:`) — see Layout for why a class-based `transform:` would
+  be clobbered by `TransitionGroup`'s FLIP move.
 - Don't give ONE-Mobile-POP a bold weight anywhere — no bold cut exists,
   and hierarchy must keep coming from tape color, not weight.
 - Don't tokenize the label's `translate(-0.6rem, 0.6rem)` offsets — they

@@ -1,6 +1,6 @@
 <template>
   <div class="chat-container">
-    <div class="list">
+    <component :is="listTag" v-bind="listProps" class="list">
       <div v-for="chat in chatItems" :key="chat.id" class="item">
         <div
           class="nickname-icon"
@@ -14,7 +14,7 @@
           :html="messageHtml(chat)"
         />
       </div>
-    </div>
+    </component>
   </div>
 </template>
 
@@ -25,6 +25,8 @@ import { hashCode, messageHtml, hashToColor } from "~/lib/utils";
 defineProps<{
   chatItems: ChatItem[];
 }>();
+
+const { listTag, listProps } = useChatListMotion();
 </script>
 
 <style scoped>
@@ -46,6 +48,15 @@ defineProps<{
      box wraps instead. */
   overflow-wrap: anywhere;
   word-break: keep-all;
+
+  /* Pure's own motion tokens (see DESIGN.md's Motion section). This round
+     every theme deliberately lands on the same fade+slide values -- the
+     owner's explicit decision for this change, not a hint to hoist them
+     into a shared token (root DESIGN.md contract rule 6/9): each theme
+     keeps its own copy, scoped to its own .chat-container. */
+  --motion-duration: 200ms;
+  --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --motion-slide: 1.2rem;
 }
 
 .list {
@@ -53,6 +64,56 @@ defineProps<{
   left: 0;
   right: 0;
   bottom: 0;
+}
+
+/* Enter/leave transition contract implemented by every theme (see root
+   DESIGN.md contract rule 9 and useChatListMotion.ts): a new message rises
+   into place from below, a removed message continues upward as it fades.
+   `translate:`, never `transform:` -- TransitionGroup's FLIP move writes an
+   inline `transform` that a class-based `transform:` would fight instead
+   of compose with.
+
+   All three classes share ONE rule, not two: TransitionGroup also applies
+   `chat-move` to a *leaving* element whenever that element's position also
+   changed in the same update -- which is exactly what happens on a
+   `maxChatSize` trim, since the bottom-anchored list shifts everything up
+   when the new message that triggered the trim is inserted. `chat-move` and
+   `chat-leave-active` have equal specificity, so whichever rule is written
+   later in the stylesheet wins outright (the `transition` shorthand
+   replaces, it does not merge) -- a separate, later `.chat-move { transition:
+   ... }` silently drops the leave rule's `opacity`/`translate` transition,
+   and the fade-out becomes a single-frame snap instead of an interpolation
+   (verified: opacity went 1 -> 0 in one frame with the rule split, sitting
+   at 0 for the rest of the duration). Listing `transform` here even though
+   `.chat-enter-active`/`.chat-leave-active` alone never receive an inline
+   `transform` costs nothing. */
+.chat-enter-active,
+.chat-leave-active,
+.chat-move {
+  transition:
+    opacity var(--motion-duration) var(--motion-ease),
+    translate var(--motion-duration) var(--motion-ease),
+    transform var(--motion-duration) var(--motion-ease);
+}
+.chat-enter-from {
+  opacity: 0;
+  translate: 0 var(--motion-slide);
+}
+.chat-leave-to {
+  opacity: 0;
+  translate: 0 calc(-1 * var(--motion-slide));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-enter-active,
+  .chat-leave-active,
+  .chat-move {
+    transition-duration: 1ms;
+  }
+  .chat-enter-from,
+  .chat-leave-to {
+    translate: none;
+  }
 }
 
 .item {

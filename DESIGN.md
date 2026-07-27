@@ -426,6 +426,26 @@ right: 0; bottom: 0 }`. Newest message renders at the bottom; older
    "fix" a sub-AA pairing you find in a theme file** — if the number is
    recorded there, it is a decision, and changing it is the owner's call,
    not a lint-driven cleanup.
+9. **Message enter/leave motion is a per-theme decision, exactly like rule
+   6** — each theme's own `DESIGN.md` records its own motion tokens
+   (durations, easing, offsets), and no two themes should share one just
+   because a number happens to match. What the contract fixes is only the
+   _mechanism_, not the look: every theme renders its list through
+   `useChatListMotion()`'s `listTag`/`listProps` (`app/composables/useChatListMotion.ts`)
+   and implements the same `chat-enter-from` / `chat-enter-active` /
+   `chat-leave-to` / `chat-leave-active` / `chat-move` transition class
+   names, so the one `isDisableAnimation` URL option can turn motion off
+   everywhere at once instead of per-theme. `isDisableAnimation` must be
+   honored by every theme that animates at all, parallel to rule 4's
+   `isHidePlatformIcon` — no theme may hardcode motion as always-on. Every
+   theme must also honor `prefers-reduced-motion: reduce`. Enter/leave
+   offsets must be expressed with the independent `translate:` property,
+   never `transform:` — `transform:` is reserved for `TransitionGroup`'s own
+   FLIP move, which writes an inline `transform` that a class-based
+   `transform:` would fight instead of compose with; a theme that gives
+   `.item` a static rotation or translation (e.g. `colorful`'s tilt) must
+   likewise express it with the independent `rotate:`/`translate:`
+   properties rather than `transform:`, for the same reason.
 
 **Where each theme's own design system lives:**
 

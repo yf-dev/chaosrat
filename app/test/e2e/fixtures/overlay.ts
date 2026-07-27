@@ -79,6 +79,24 @@ export async function openOverlay(
     await expect(page.locator(".item")).toHaveCount(messages.length);
   }
 
+  // Motion (phase 1/2) is on by default, and Playwright's animation-disabling
+  // only applies to `toHaveScreenshot` -- `captureStyleFingerprint` (reads
+  // computed styles) and `expectNoHorizontalOverflow` (reads `scrollWidth`)
+  // have no such guard, so either can run while an enter or FLIP-move
+  // transition is still interpolating `transform`/`translate`/`opacity` and
+  // capture a mid-animation value that differs run to run. Wait for the
+  // observable "no transition classes present" state rather than a fixed
+  // `waitForTimeout`, which would either flake under load or pad every test
+  // with dead time. This resolves immediately when `isDisableAnimation=true`
+  // (the composable renders a plain `<div>`, so these classes never appear)
+  // and is therefore harmless to run unconditionally.
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll(
+        ".chat-enter-active, .chat-leave-active, .chat-move",
+      ).length === 0,
+  );
+
   await page.evaluate(() => document.fonts.ready);
 
   if (messages.length > 0 && FONT_DEPENDENT_THEMES.has(theme)) {

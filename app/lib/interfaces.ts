@@ -48,6 +48,7 @@ export interface ChatOptions {
   soundEffectCustomUrl?: string;
   isUseOpenDcconSelector?: boolean;
   isHidePlatformIcon?: boolean;
+  isDisableAnimation?: boolean;
 }
 
 export interface ChatItem {

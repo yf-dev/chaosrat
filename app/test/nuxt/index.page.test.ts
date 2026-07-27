@@ -108,6 +108,7 @@ describe("pages/index.vue", () => {
         soundEffectCustomUrl: undefined,
         isUseOpenDcconSelector: false,
         isHidePlatformIcon: false,
+        isDisableAnimation: false,
       });
     });
 
@@ -130,6 +131,7 @@ describe("pages/index.vue", () => {
       // that twitchChannel has already been filled in above.
       await wrapper.find("#isUseOpenDcconSelector").setValue(true);
       await wrapper.find("#isHidePlatformIcon").setValue(true);
+      await wrapper.find("#isDisableAnimation").setValue(true);
 
       const chatOptions = parseBackThroughStore(urlInputValue(wrapper));
 
@@ -147,6 +149,7 @@ describe("pages/index.vue", () => {
         soundEffectCustomUrl: "https://example.com/sound-effect.mp3",
         isUseOpenDcconSelector: true,
         isHidePlatformIcon: true,
+        isDisableAnimation: true,
       });
     });
 
@@ -170,6 +173,20 @@ describe("pages/index.vue", () => {
 
       const chatOptions = parseBackThroughStore(urlInputValue(wrapper));
       expect(chatOptions.isUseOpenDcconSelector).toBe(false);
+    });
+
+    it("sets isDisableAnimation in the URL when the checkbox is checked, and omits it otherwise", async () => {
+      const wrapper = await mountIndexPage();
+
+      const uncheckedChatOptions = parseBackThroughStore(
+        urlInputValue(wrapper),
+      );
+      expect(uncheckedChatOptions.isDisableAnimation).toBe(false);
+
+      await wrapper.find("#isDisableAnimation").setValue(true);
+
+      const checkedChatOptions = parseBackThroughStore(urlInputValue(wrapper));
+      expect(checkedChatOptions.isDisableAnimation).toBe(true);
     });
 
     it("dropping soundEffectType back to 'none' omits soundEffectVolume/soundEffectCustomUrl even if they were previously set", async () => {

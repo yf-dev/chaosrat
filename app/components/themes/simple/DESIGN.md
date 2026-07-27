@@ -28,6 +28,14 @@ spacing:
   # override them locally.
   icon: 1.8rem
   sticker: 10rem
+motion:
+  # Scoped to this theme's own .chat-container in SimpleChatList.vue, like
+  # every other token group in this file -- see the Motion section for why
+  # this round's values match every other theme's without being a shared
+  # token (root DESIGN.md contract rule 6/9).
+  duration: 200ms
+  ease: "cubic-bezier(0.22, 1, 0.36, 1)"
+  slide: 1.2rem
 components:
   message:
     textColor: "{colors.text}"
@@ -212,6 +220,30 @@ an `<img>`, never a container shape around it.
 - **{components.sticker}** is a fixed `{spacing.sticker}` square, the
   one element in the theme large enough to be seen as an image rather than
   a glyph riding the text line.
+
+## Motion
+
+An open caption doesn't cross-fade over the footage the way a lower-third
+graphic might — it keys in as a new line and keys back out, the way a hard
+sub or auto-caption cue appears for its moment on screen and then lifts.
+`SimpleChatList.vue` renders through `useChatListMotion()`'s
+`listTag`/`listProps`, so a new line rises `{motion.slide}` (`1.2rem`) from
+below while fading in over `{motion.duration}` (`200ms`, `{motion.ease}`),
+and a removed line continues that same upward drift while fading out — the
+same cue, run in reverse, so the caption never just vanishes mid-line. The
+offset is expressed with the independent `translate:` property rather than
+`transform:`, because `TransitionGroup`'s FLIP repositioning writes its own
+inline `transform` on every moved line, and a class-based `transform:` would
+be silently clobbered by that inline style instead of composing with it.
+
+`isDisableAnimation` removes the `<TransitionGroup>` entirely (the composable
+swaps in a plain `<div>`), not just its transition durations — a caption
+line that should be as unobtrusive as possible has no motion at all when the
+option is set, not a fast one. `prefers-reduced-motion: reduce` takes the
+middle path: the transition still runs, but collapses to a near-instant
+(`1ms`) cut with no slide, so the line still updates for a viewer whose OS
+setting asks for stillness without a second, separate "no transition"
+mechanism.
 
 ## Do's and Don'ts
 

@@ -13,6 +13,14 @@ spacing:
   pad: 0.8rem # mirrors --pad on .chat-container
   icon: 1.8rem # mirrors --chat-icon-size in app/assets/css/main.css — see Components
   sticker: 10rem # mirrors --chat-sticker-size in app/assets/css/main.css — see Components
+motion:
+  # Scoped to this theme's own .chat-container in CuteChatBaseList.vue, like
+  # every other token group in this file -- see the Motion section for why
+  # this round's values match every other theme's without being a shared
+  # token (root DESIGN.md contract rule 6/9).
+  duration: 200ms
+  ease: "cubic-bezier(0.22, 1, 0.36, 1)"
+  slide: 1.2rem
 components:
   bubble:
     backgroundColor: "{colors.primary}"
@@ -190,10 +198,22 @@ all. Both are cut by SVG `clipPath`s (`#item-rect` for the bubble,
 `#nickname-rect` for the nickname strip) built from a handful of uneven
 quadratic Bézier curves in `objectBoundingBox` units, which is what produces
 the hand-cut wobble instead of a geometric rounded rectangle. The whole
-bubble is additionally rotated `-1deg` (`.item`'s `transform`), reinforcing
-the "propped on the page, not machine-aligned" read. Neither the clip-path
-data nor the rotation has a home in the `components.*` schema, so both are
-documented here rather than invented as fake tokens.
+bubble is additionally rotated `-1deg` (`.item`'s `rotate` property — see
+below for why it's `rotate:` and not `transform:`), reinforcing the "propped
+on the page, not machine-aligned" read. Neither the clip-path data nor the
+rotation has a home in the `components.*` schema, so both are documented
+here rather than invented as fake tokens.
+
+`.item`'s tilt is expressed with the independent `rotate: -1deg;` property
+rather than `transform: rotate(-1deg);`. `.item` is no longer the direct
+`TransitionGroup` child that `useChatListMotion()` animates — `.motion-slot`
+(see Motion) is, and it is `.motion-slot` that receives FLIP's inline
+`transform` today — but `.item` keeps `rotate:` both to render identically
+to the old `rotate(-1deg)` and as a hedge: `rotate:` composes with any
+inline `transform` a future refactor might reintroduce directly on `.item`,
+where a class-based `transform:` would silently be clobbered and the bubble
+would visibly flatten out mid-move — exactly the "machine-made" look this
+theme exists to avoid.
 
 ## Components
 
@@ -218,6 +238,60 @@ documented here rather than invented as fake tokens.
 - `emoji` — same mirror, applied to inline emoji height (`{spacing.icon}`).
 - `sticker` — mirrors `--chat-sticker-size: 10rem` from the same shared
   stylesheet, likewise a read-only copy rather than an independent value.
+
+## Motion
+
+A hand-cut paper cutout doesn't fade into being — someone tapes or pins it
+onto the corkboard, and it visibly settles into place, tilt and all, rather
+than materializing flat. `CuteChatBaseList.vue` renders through
+`useChatListMotion()`'s `listTag`/`listProps`, so a new bubble rises
+`{motion.slide}` (`1.2rem`) from below while fading in over
+`{motion.duration}` (`200ms`, `{motion.ease}`), and a removed one continues
+that same upward drift while fading out — as if peeled off the board rather
+than deleted. The offset is expressed with the independent `translate:`
+property rather than `transform:`, for the same reason the bubble's `-1deg`
+tilt is (see Shapes): `TransitionGroup`'s FLIP move writes its own inline
+`transform`, which would clobber a class-based `transform:` instead of
+composing with it.
+
+Enter, leave, **and** the reflow-follow (`.chat-move`) all animate now.
+`TransitionGroup`'s FLIP move writes a purely vertical inline
+`transform: translate(0, dy)` on its direct child to reposition a shifted
+bubble; if `.item` — which carries the `-1deg` tilt — were that direct
+child, the vertical delta would apply _inside_ the rotated frame and pick up
+a horizontal component of `dy * tan(1deg) ~= dy * 0.01746`. With a tall
+message stack `dy` reaches several hundred px, which previously swung the
+bubble tens of px sideways and off a narrow OBS source -- measured directly:
+a mid-move item's inline style was
+`transform: matrix(1, 0, 0, 1, 3.56, 203.95)`, and `3.56 / 203.95 = tan(1deg)`
+exactly.
+
+The fix, not a re-tuned number: a wrapper element, `.motion-slot`, now sits
+between `.list` and `.item` in `CuteChatBaseList.vue`'s template and carries
+**no styling of its own**. `TransitionGroup`'s `:key` moved from `.item` to
+`.motion-slot`, making the wrapper — not the rotated bubble — the element
+FLIP writes its inline `transform` onto; `.item`'s own `rotate: -1deg` sits
+one level deeper and never receives that inline style, so `.chat-move`'s
+`transition: transform ...` now animates a plain, un-rotated box with no
+`tan(theta)` term to introduce drift. The layout is unchanged without the
+wrapper carrying any styling of its own: `.list` is `display: flex;
+flex-direction: column`, so `.motion-slot` becomes the flex item and is
+shrink-to-fit in the cross axis by default (flex items never collapse
+margins, before or after, so the `0.4rem`/`0.8rem` inter-item gap on
+`.item`'s own margin is unchanged either way) — `.item` inside it keeps its
+`width: fit-content; max-width: 100%` behavior exactly as before, since a
+styleless flex item imposes no width of its own. Do not give `.motion-slot`
+any width, padding, border, or alignment override — any of those would stop
+it from being a transparent pass-through for `.item`'s own sizing.
+
+`isDisableAnimation` removes the `<TransitionGroup>` entirely (the
+composable swaps in a plain `<div>`), not just its transition durations — a
+broadcaster who wants a static corkboard of bubbles gets exactly that, not
+a faster version of the settle-in motion. `prefers-reduced-motion: reduce`
+takes the middle path: the transition still runs, but collapses to a
+near-instant (`1ms`) cut with no slide, so the board still updates for a
+viewer whose OS setting asks for stillness without a second, separate "no
+transition" mechanism.
 
 ## Do's and Don'ts
 
@@ -246,5 +320,9 @@ documented here rather than invented as fake tokens.
   `border-radius` to "simplify" the markup. The wobble is the entire hand-cut
   read this theme is built on; a rounded rectangle is a different, blander
   design.
+- Do keep `.item`'s tilt on the independent `rotate:` property, not
+  `transform:` — see Shapes for why a class-based `transform:` would be
+  clobbered by `TransitionGroup`'s FLIP move and flatten the bubble
+  mid-animation.
 - Do keep `word-break: keep-all` paired with `overflow-wrap: anywhere` on `.chat-container`. Don't drop `keep-all` — that reopens mid-어절 breaks in Korean text; don't drop `overflow-wrap: anywhere` either — that lets an unbroken run overflow the bubble instead of wrapping; and don't swap it back to `break-word` — `break-word` doesn't shrink `.item`'s fit-content min-content size, so a spaceless nickname overflows instead of wrapping.
 </content>

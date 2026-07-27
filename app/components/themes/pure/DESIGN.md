@@ -19,6 +19,14 @@ spacing:
   dot-size: 1.2rem
   icon: 1.8rem
   sticker: 10rem
+motion:
+  # Scoped to this theme's own .chat-container in PureChatList.vue, like
+  # every other token group in this file -- see the Motion section for why
+  # this round's values match every other theme's without being a shared
+  # token (root DESIGN.md contract rule 6/9).
+  duration: 200ms
+  ease: "cubic-bezier(0.22, 1, 0.36, 1)"
+  slide: 1.2rem
 components:
   identity-dot:
     backgroundColor: "{colors.primary}"
@@ -209,6 +217,30 @@ regardless of what hue landed inside it. The message itself sets no
   (see Layout).
 - `sticker` — mirrors the same file's `--chat-sticker-size: 10rem` the same
   way.
+
+## Motion
+
+A collaborator cursor doesn't materialize out of thin air — it slides into
+view the way a live-editing marker glides to its new position rather than
+popping in and out. `PureChatList.vue` renders through
+`useChatListMotion()`'s `listTag`/`listProps`, so a new dot-plus-message rises
+`{motion.slide}` (`1.2rem`) from below while fading in over
+`{motion.duration}` (`200ms`, `{motion.ease}`), and a removed one continues
+that same upward drift while fading out — a quiet enough motion that it
+doesn't compete with the message it is meant to leave alone (see Overview).
+The offset is expressed with the independent `translate:` property rather
+than `transform:`, because `TransitionGroup`'s FLIP repositioning writes its
+own inline `transform` on every moved item, and a class-based `transform:`
+would be silently clobbered by that inline style instead of composing with
+it.
+
+`isDisableAnimation` removes the `<TransitionGroup>` entirely (the composable
+swaps in a plain `<div>`), not just its transition durations — a theme this
+stripped-down has no motion at all when the option is set, not a fast one.
+`prefers-reduced-motion: reduce` takes the middle path: the transition still
+runs, but collapses to a near-instant (`1ms`) cut with no slide, so the list
+still updates for a viewer whose OS setting asks for stillness without a
+second, separate "no transition" mechanism.
 
 ## Do's and Don'ts
 

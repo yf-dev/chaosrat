@@ -10,12 +10,15 @@ import CuteChatBaseList from "~/components/themes/cute/CuteChatBaseList.vue";
 import CuteChatLeftList from "~/components/themes/cute/CuteChatLeftList.vue";
 import CuteChatRightList from "~/components/themes/cute/CuteChatRightList.vue";
 
-// All theme components except PureChatList call `useChatOptionsStore()`
-// (directly, or -- for CuteChatLeftList/CuteChatRightList -- transitively
-// through CuteChatBaseList) purely to read `isHidePlatformIcon`. Mocking the
-// store here avoids ever touching the real Pinia/`useRoute` machinery (that's
-// already covered by useChatOptionsStore.test.ts); it also sidesteps a real
-// hazard: `@nuxt/test-utils`'s `mountSuspended` reuses one shared NuxtApp (and
+// Every theme component in this file calls `useChatOptionsStore()`, either
+// directly to read `isHidePlatformIcon`, or -- PureChatList's only path,
+// since it renders no platform icon at all -- transitively through
+// `useChatListMotion()` (used by every theme, including
+// CuteChatLeftList/CuteChatRightList via CuteChatBaseList) to read
+// `isDisableAnimation`. Mocking the store here avoids ever touching the real
+// Pinia/`useRoute` machinery (that's already covered by
+// useChatOptionsStore.test.ts); it also sidesteps a real hazard:
+// `@nuxt/test-utils`'s `mountSuspended` reuses one shared NuxtApp (and
 // therefore one shared Pinia instance) across every `it()` in this file, so a
 // real store's `chatOptions` ref -- and whatever `route.query` it captured on
 // its first construction -- would leak across tests instead of resetting.

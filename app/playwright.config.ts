@@ -33,10 +33,22 @@ export default defineConfig({
     // `reducedMotion` is not one of the direct `PlaywrightTestOptions`
     // fields in @playwright/test@1.61.0's types (unlike colorScheme/locale/
     // timezoneId) -- it must go through the `contextOptions` passthrough to
-    // browser.newContext(). The app itself has no CSS animations or
-    // transitions in any theme (verified by grep); this is belt-and-braces
-    // for third-party CSS (chota) and for the screenshot tests a later
-    // agent will add.
+    // browser.newContext(). Every theme now ships a real
+    // `prefers-reduced-motion: reduce` block (chat list enter/leave/move
+    // transitions -- see useChatListMotion.ts and each theme's DESIGN.md
+    // Motion section), and this setting is what makes the *entire* e2e
+    // suite -- functional specs and visual snapshots alike -- render through
+    // that reduced-motion branch (transition durations collapse to 1ms,
+    // translate offsets collapse to `none`). That is what keeps
+    // `toHaveScreenshot`/`captureStyleFingerprint` deterministic. The
+    // consequence: the default full-motion path (the one every real viewer
+    // gets, since `isDisableAnimation` defaults to off) is only exercised by
+    // tests that explicitly opt out per-block via
+    // `test.use({ contextOptions: { reducedMotion: "no-preference" } })` --
+    // see "chat list motion" in overlay.spec.ts. A plain
+    // `test.use({ reducedMotion: ... })` does NOT override this, precisely
+    // because the setting lives under `contextOptions` rather than being a
+    // direct option.
     contextOptions: {
       reducedMotion: "reduce",
     },

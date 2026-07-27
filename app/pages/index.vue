@@ -271,6 +271,26 @@
                 플랫폼 아이콘 숨기기
               </label>
             </div>
+            <div>
+              <input
+                id="isDisableAnimation"
+                type="checkbox"
+                class="form-check-input"
+                :checked="isDisableAnimation"
+                @change="
+                  isDisableAnimation = ($event.target as HTMLInputElement)
+                    .checked
+                "
+              />
+              <label class="form-check-label" for="isDisableAnimation">
+                채팅 애니메이션 끄기
+                <span
+                  class="tooltip"
+                  title="새 채팅은 아래에서 떠오르며 나타나고, 사라지는 채팅은 위로 밀려 올라가며 옅어지고, 그 사이 남은 채팅들은 새 위치로 부드럽게 이동합니다. 체크하면 이 움직임 없이 채팅이 즉시 나타나고 사라집니다"
+                  >?</span
+                >
+              </label>
+            </div>
           </div>
         </fieldset>
       </div>
@@ -383,6 +403,7 @@ const soundEffectVolume = ref<number>(100);
 const soundEffectCustomUrl = ref<string>("");
 const isUseOpenDcconSelector = ref<boolean>(false);
 const isHidePlatformIcon = ref<boolean>(false);
+const isDisableAnimation = ref<boolean>(false);
 
 const isChzzkLoggedIn = ref<boolean>(false);
 
@@ -437,6 +458,9 @@ const chatOverlayUrl = computed(() => {
 
   if (isHidePlatformIcon.value) {
     url.searchParams.set("isHidePlatformIcon", "true");
+  }
+  if (isDisableAnimation.value) {
+    url.searchParams.set("isDisableAnimation", "true");
   }
   return url.toString();
 });

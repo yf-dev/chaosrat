@@ -34,7 +34,15 @@ import type { Page } from "@playwright/test";
  * theme (DESIGN.md: "the overlay has no shadows at all") but are kept
  * because they're part of this suite's explicit brief and pin a legitimate
  * "still none" fact -- a future theme silently adding one would be exactly
- * the kind of change this suite exists to catch.
+ * the kind of change this suite exists to catch. `rotate`/`translate`/`scale`
+ * were added alongside `transform`/`transformOrigin` when `colorful` and
+ * `cute` switched their `.item` tilt from `transform: rotateZ(...)` to the
+ * independent `rotate:` property (root DESIGN.md contract rule 9 --
+ * TransitionGroup's FLIP move writes an inline `transform`, which would
+ * clobber a class-based `transform:` but composes fine with `rotate:`).
+ * Without these three, that tilt -- and any future theme's independent-
+ * property motion offset -- would silently stop being pinned by this
+ * fingerprint even though `transform` itself is still captured.
  */
 const PROPERTIES = [
   "display",
@@ -84,6 +92,9 @@ const PROPERTIES = [
   "marginLeft",
   "transform",
   "transformOrigin",
+  "rotate",
+  "translate",
+  "scale",
   "opacity",
   "boxShadow",
   "textShadow",

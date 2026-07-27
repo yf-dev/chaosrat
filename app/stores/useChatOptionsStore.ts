@@ -177,6 +177,13 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
     return parseBooleanFlag(route.query.isHidePlatformIcon);
   });
 
+  const isDisableAnimation = computed<boolean | undefined>(() => {
+    if (Array.isArray(route.query.isDisableAnimation)) {
+      return parseBooleanFlag(route.query.isDisableAnimation[0]);
+    }
+    return parseBooleanFlag(route.query.isDisableAnimation);
+  });
+
   const chatOptions = ref<ChatOptions>({
     chzzkChannelId: chzzkChannelId.value,
     twitchChannel: twitchChannel.value,
@@ -191,6 +198,7 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
     soundEffectCustomUrl: soundEffectCustomUrl.value,
     isUseOpenDcconSelector: isUseOpenDcconSelector.value,
     isHidePlatformIcon: isHidePlatformIcon.value,
+    isDisableAnimation: isDisableAnimation.value,
   });
 
   watch(
@@ -208,6 +216,7 @@ export const useChatOptionsStore = defineStore("chatOptions", () => {
       soundEffectCustomUrl: soundEffectCustomUrl.value,
       isUseOpenDcconSelector: isUseOpenDcconSelector.value,
       isHidePlatformIcon: isHidePlatformIcon.value,
+      isDisableAnimation: isDisableAnimation.value,
     }),
     (val) => {
       chatOptions.value = val;

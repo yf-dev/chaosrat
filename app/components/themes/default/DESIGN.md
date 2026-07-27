@@ -13,6 +13,14 @@ spacing:
   pad: 0.8rem
   icon: 1.8rem
   sticker: 10rem
+motion:
+  # Scoped to this theme's own .chat-container in DefaultChatList.vue, like
+  # every other token group in this file -- see the Motion section for why
+  # this round's values match every other theme's without being a shared
+  # token (root DESIGN.md contract rule 6/9).
+  duration: 200ms
+  ease: "cubic-bezier(0.22, 1, 0.36, 1)"
+  slide: 1.2rem
 components:
   item:
     backgroundColor: "{colors.primary}"
@@ -178,6 +186,31 @@ not supposed to make.
   it must track `--chat-icon-size`, never diverge from it locally.
 - `sticker` — mirrors the same file's `--chat-sticker-size: 10rem`.
   `{spacing.sticker}` is likewise a mirror, not an independent value.
+
+## Motion
+
+A caption plate doesn't fade into existence out of nowhere — a character
+generator inserts a new line by rolling it up from the bottom of the strip,
+the way a lower-third crawls a new item into a fixed slot rather than
+cross-dissolving it in place. `DefaultChatList.vue` renders through
+`useChatListMotion()`'s `listTag`/`listProps`, so a new item rises
+`{motion.slide}` (`1.2rem`) from below while fading in over
+`{motion.duration}` (`200ms`, `{motion.ease}`), and a removed item continues
+that same upward glide while fading out — visually the same insert, run in
+reverse, not a different exit effect. The offset is expressed with the
+independent `translate:` property rather than `transform:`, because
+`TransitionGroup`'s FLIP repositioning writes its own inline `transform` on
+every moved item, and a class-based `transform:` would be silently clobbered
+by that inline style instead of composing with it.
+
+`isDisableAnimation` removes the `<TransitionGroup>` entirely (the composable
+swaps in a plain `<div>`), not just its transition durations — this plate has
+no motion at all when the option is set, matching how a broadcaster who
+doesn't want any caption movement expects none, not a fast one.
+`prefers-reduced-motion: reduce` takes the middle path: the transition still
+runs, but collapses to a near-instant (`1ms`) cut with no slide, so the strip
+still updates for a viewer whose OS setting asks for stillness without the
+whole mechanism special-casing "no transition classes at all" a second way.
 
 ## Do's and Don'ts
 

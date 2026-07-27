@@ -92,6 +92,14 @@ spacing:
   # Mirror of the cross-theme contract's `--chat-sticker-size`, same
   # single-file-resolution caveat as icon above.
   sticker: 10rem
+motion:
+  # Scoped to this theme's own .chat-container in VideoMasterChatList.vue,
+  # like every other token group in this file -- see the Motion section for
+  # why this round's values match every other theme's without being a
+  # shared token (root DESIGN.md contract rule 6/9).
+  duration: 200ms
+  ease: "cubic-bezier(0.22, 1, 0.36, 1)"
+  slide: 1.2rem
 components:
   canvas:
     backgroundColor: "{colors.primary}"
@@ -380,6 +388,32 @@ every other column and break the grid the entire Overview reference is
 built on. The per-user color is a bonus (it gives each participant a
 consistent, distinguishing mark even with icons hidden), but the reason the
 slot stays filled is structural, not decorative.
+
+## Motion
+
+A file manager's Details view doesn't fade a newly created file into the
+list — the row simply appears at its sorted position, and a live-updating
+view (a directory being watched, a download list) slides that new row into
+place among its neighbors rather than popping it in. `VideoMasterChatList.vue`
+renders through `useChatListMotion()`'s `listTag`/`listProps`, so a new row
+rises `{motion.slide}` (`1.2rem`) from below while fading in over
+`{motion.duration}` (`200ms`, `{motion.ease}`), and a removed row continues
+that same upward motion while fading out — consistent with the Overview's
+reference object, since a modern file manager slides a deleted row out of
+the list rather than cutting it away. The offset is expressed with the
+independent `translate:` property rather than `transform:`, because
+`TransitionGroup`'s FLIP repositioning writes its own inline `transform` on
+every moved row, and a class-based `transform:` would be silently clobbered
+by that inline style instead of composing with it.
+
+`isDisableAnimation` removes the `<TransitionGroup>` entirely (the
+composable swaps in a plain `<div>`), not just its transition durations —
+this theme's own opaque, application-chrome register (see Overview) can
+reasonably want a perfectly static table with no motion at all, not a
+faster one. `prefers-reduced-motion: reduce` takes the middle path: the
+transition still runs, but collapses to a near-instant (`1ms`) cut with no
+slide, so the table still updates for a viewer whose OS setting asks for
+stillness without a second, separate "no transition" mechanism.
 
 ## Do's and Don'ts
 

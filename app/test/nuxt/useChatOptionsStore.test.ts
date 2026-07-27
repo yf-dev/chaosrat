@@ -315,16 +315,21 @@ describe("useChatOptionsStore", () => {
     );
   });
 
-  describe("isUseOpenDcconSelector / isHidePlatformIcon (boolean flags)", () => {
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
-      "%s: missing param is false",
-      (key) => {
-        const store = storeFor({});
-        expect(store.chatOptions[key]).toBe(false);
-      },
-    );
+  describe("isUseOpenDcconSelector / isHidePlatformIcon / isDisableAnimation (boolean flags)", () => {
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)("%s: missing param is false", (key) => {
+      const store = storeFor({});
+      expect(store.chatOptions[key]).toBe(false);
+    });
 
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)(
       "%s: a bare flag (null query value, e.g. `?%s`) is false",
       (key) => {
         const store = storeFor({ [key]: null });
@@ -332,13 +337,14 @@ describe("useChatOptionsStore", () => {
       },
     );
 
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
-      "%s: `=true` is true",
-      (key) => {
-        const store = storeFor({ [key]: "true" });
-        expect(store.chatOptions[key]).toBe(true);
-      },
-    );
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)("%s: `=true` is true", (key) => {
+      const store = storeFor({ [key]: "true" });
+      expect(store.chatOptions[key]).toBe(true);
+    });
 
     // FIXED: the computed used to do `!!route.query.<key>`. Any non-empty
     // *string* is truthy in JS, including the literal string "false", so
@@ -346,7 +352,11 @@ describe("useChatOptionsStore", () => {
     // turn the flag ON -- the opposite of what a user typing that would
     // expect. The store now special-cases the literal strings "false" and
     // "0" to read as false.
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)(
       "%s: the literal string '=false' is treated as false",
       (key) => {
         const store = storeFor({ [key]: "false" });
@@ -354,20 +364,25 @@ describe("useChatOptionsStore", () => {
       },
     );
 
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
-      "%s: the literal string '=0' is treated as false",
-      (key) => {
-        const store = storeFor({ [key]: "0" });
-        expect(store.chatOptions[key]).toBe(false);
-      },
-    );
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)("%s: the literal string '=0' is treated as false", (key) => {
+      const store = storeFor({ [key]: "0" });
+      expect(store.chatOptions[key]).toBe(false);
+    });
 
     // The URL builder (pages/index.vue) never writes anything but "true" or
     // omits the key -- it never writes an arbitrary string. This pins the
     // pre-existing "any other non-empty string is truthy" fallback so that
     // hand-written URLs using e.g. `=1` or `=yes` keep behaving as they did
     // before this fix.
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)(
       "%s: an arbitrary non-empty string other than 'false'/'0' is treated as true",
       (key) => {
         const store = storeFor({ [key]: "yes" });
@@ -375,7 +390,11 @@ describe("useChatOptionsStore", () => {
       },
     );
 
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)(
       "%s: repeated param takes the first element (truthy string)",
       (key) => {
         const store = storeFor({ [key]: ["true", "false"] });
@@ -383,7 +402,11 @@ describe("useChatOptionsStore", () => {
       },
     );
 
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)(
       "%s: repeated param whose first element is 'false' is false",
       (key) => {
         const store = storeFor({ [key]: ["false", "true"] });
@@ -391,7 +414,11 @@ describe("useChatOptionsStore", () => {
       },
     );
 
-    it.each(["isUseOpenDcconSelector", "isHidePlatformIcon"] as const)(
+    it.each([
+      "isUseOpenDcconSelector",
+      "isHidePlatformIcon",
+      "isDisableAnimation",
+    ] as const)(
       "%s: repeated param whose first element is null is false",
       (key) => {
         const store = storeFor({ [key]: [null, "true"] });
@@ -406,6 +433,7 @@ describe("useChatOptionsStore", () => {
       theme: "cute-left",
       maxChatSize: "50",
       isHidePlatformIcon: "true",
+      isDisableAnimation: "true",
     });
     expect(store.chatOptions).toMatchObject({
       chzzkChannelId: "chan1",
@@ -421,6 +449,7 @@ describe("useChatOptionsStore", () => {
       soundEffectCustomUrl: undefined,
       isUseOpenDcconSelector: false,
       isHidePlatformIcon: true,
+      isDisableAnimation: true,
     });
   });
 });
