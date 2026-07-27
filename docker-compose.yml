@@ -1,4 +1,3 @@
-version: "3.9"
 services:
   app:
     build:
@@ -12,4 +11,4 @@ services:
         - NUXT_PUBLIC_BASE_URL=http://localhost:3000
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3000:80"

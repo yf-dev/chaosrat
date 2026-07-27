@@ -3,6 +3,10 @@
   "version": "0.0.1",
   "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "npm": ">=11.0.0"
+  },
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev --host 0.0.0.0 --port 3000",
