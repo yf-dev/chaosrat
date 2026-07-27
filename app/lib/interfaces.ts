@@ -92,7 +92,11 @@ export interface ApiOk {
 }
 
 export interface ChzzkChatChannelIdResponse extends ApiOk {
-  chatChannelId: string;
+  chatChannelId: string | null;
+  // Upstream ("OPEN" | "CLOSE") is unofficial and undocumented, so it is kept
+  // as a plain string rather than a union.
+  liveStatus: string | null;
+  openDate: string | null;
 }
 
 export interface ChzzkAuthLoginResponse extends ApiOk {
@@ -106,6 +110,22 @@ export interface ChzzkMeResponse extends ApiOk {
 
 export interface ChzzkSessionOpenResponse extends ApiOk {
   url: string;
+}
+
+export interface ChzzkSubscribedEvent {
+  eventType: string;
+  channelId: string;
+}
+
+export interface ChzzkSessionInfo {
+  sessionKey: string;
+  connectedDate?: string | null;
+  disconnectedDate?: string | null;
+  subscribedEvents: ChzzkSubscribedEvent[];
+}
+
+export interface ChzzkSessionListResponse extends ApiOk {
+  sessions: ChzzkSessionInfo[];
 }
 
 export interface TwitchBadge {

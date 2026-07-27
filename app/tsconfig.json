@@ -1,4 +1,11 @@
 {
   // https://nuxt.com/docs/guide/concepts/typescript
-  "extends": "./.nuxt/tsconfig.json"
+  "extends": "./.nuxt/tsconfig.json",
+  "compilerOptions": {
+    // vitest runs with `globals: true` (see vitest.config.ts), so `describe`,
+    // `it`, `expect` and `vi` are ambient in test files. Nuxt's generated
+    // tsconfig sets `"types": []`, which leaves the editor and a raw `tsc`
+    // reporting them as undefined names.
+    "types": ["vitest/globals"]
+  }
 }

@@ -16,9 +16,14 @@ describe("server/api/chzzk/chatChannelId", () => {
     });
   });
 
-  it("returns the chatChannelId on success", async () => {
+  it("returns the chatChannelId, liveStatus and openDate when the broadcast is live (OPEN)", async () => {
     globalThis.$fetch = vi.fn().mockResolvedValue({
-      content: { chatChannelId: "chat-channel-1" },
+      code: 200,
+      content: {
+        status: "OPEN",
+        openDate: "2026-07-26 14:09:18",
+        chatChannelId: "chat-channel-1",
+      },
     }) as unknown as typeof globalThis.$fetch;
 
     const handler = (await import("~/server/api/chzzk/chatChannelId")).default;
@@ -28,10 +33,42 @@ describe("server/api/chzzk/chatChannelId", () => {
 
     const result = await handler(event);
 
-    expect(result).toEqual({ status: "OK", chatChannelId: "chat-channel-1" });
+    expect(result).toEqual({
+      status: "OK",
+      chatChannelId: "chat-channel-1",
+      liveStatus: "OPEN",
+      openDate: "2026-07-26 14:09:18",
+    });
   });
 
-  it("returns no_chat_channel_id when the response has no chatChannelId", async () => {
+  it("returns OK with a null chatChannelId when the channel is offline (CLOSE)", async () => {
+    // Verified live upstream shape: chatChannelId is null (not omitted) when
+    // the channel is not currently broadcasting.
+    globalThis.$fetch = vi.fn().mockResolvedValue({
+      code: 200,
+      content: {
+        status: "CLOSE",
+        openDate: "2026-07-26 14:09:18",
+        chatChannelId: null,
+      },
+    }) as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/chatChannelId")).default;
+    const { event } = createMockEvent({
+      url: "/api/chzzk/chatChannelId?channelId=abc",
+    });
+
+    const result = await handler(event);
+
+    expect(result).toEqual({
+      status: "OK",
+      chatChannelId: null,
+      liveStatus: "CLOSE",
+      openDate: "2026-07-26 14:09:18",
+    });
+  });
+
+  it("defaults missing fields to null when content is present but sparse", async () => {
     globalThis.$fetch = vi.fn().mockResolvedValue({
       content: {},
     }) as unknown as typeof globalThis.$fetch;
@@ -44,9 +81,29 @@ describe("server/api/chzzk/chatChannelId", () => {
     const result = await handler(event);
 
     expect(result).toEqual({
+      status: "OK",
+      chatChannelId: null,
+      liveStatus: null,
+      openDate: null,
+    });
+  });
+
+  it("returns no_chat_channel_id when the response has no content object at all", async () => {
+    globalThis.$fetch = vi.fn().mockResolvedValue({
+      code: 200,
+    }) as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/chatChannelId")).default;
+    const { event } = createMockEvent({
+      url: "/api/chzzk/chatChannelId?channelId=abc",
+    });
+
+    const result = await handler(event);
+
+    expect(result).toEqual({
       status: "ERROR",
       code: "no_chat_channel_id",
-      error: "No chatChannelId in response",
+      error: "No content in response",
     });
   });
 

@@ -523,6 +523,267 @@ describe("useChzzk", () => {
     });
   });
 
+  describe("fetchLiveSignal (deps passed to createChzzkConnection)", () => {
+    it("returns UNKNOWN without calling $fetch when chzzkChannelId is unset", async () => {
+      setUp();
+      useChzzk({});
+
+      const result = await deps().fetchLiveSignal();
+
+      expect(result).toEqual({ status: "UNKNOWN" });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("requests /api/chzzk/chatChannelId with the configured channelId in the query", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "OK",
+        chatChannelId: null,
+        liveStatus: "CLOSE",
+        openDate: null,
+      });
+      useChzzk({});
+
+      await deps().fetchLiveSignal();
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/chzzk/chatChannelId",
+        expect.objectContaining({ query: { channelId: "chan-1" } }),
+      );
+    });
+
+    it("returns OPEN with the chatChannelId and logs it when liveStatus is OPEN with a real chatChannelId", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "OK",
+        chatChannelId: "chat-1",
+        liveStatus: "OPEN",
+        openDate: "2026-07-27T00:00:00",
+      });
+      const consoleLogSpy = vi
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      useChzzk({});
+
+      const result = await deps().fetchLiveSignal();
+
+      expect(result).toEqual({ status: "OPEN", chatChannelId: "chat-1" });
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        "Chzzk live signal: chatChannelId",
+        "chat-1",
+      );
+
+      consoleLogSpy.mockRestore();
+    });
+
+    it("returns CLOSED and does not log the chatChannelId diagnostic when liveStatus is CLOSE", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "OK",
+        chatChannelId: null,
+        liveStatus: "CLOSE",
+        openDate: null,
+      });
+      const consoleLogSpy = vi
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      useChzzk({});
+
+      const result = await deps().fetchLiveSignal();
+
+      expect(result).toEqual({ status: "CLOSED" });
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+
+      consoleLogSpy.mockRestore();
+    });
+
+    it("returns OPEN with a null chatChannelId and does not log when chatChannelId is null", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "OK",
+        chatChannelId: null,
+        liveStatus: "OPEN",
+        openDate: "2026-07-27T00:00:00",
+      });
+      const consoleLogSpy = vi
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      useChzzk({});
+
+      const result = await deps().fetchLiveSignal();
+
+      expect(result).toEqual({ status: "OPEN", chatChannelId: null });
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+
+      consoleLogSpy.mockRestore();
+    });
+
+    it("returns UNKNOWN on an ERROR envelope", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "ERROR",
+        code: "internal_server_error",
+        error: "boom",
+      });
+      useChzzk({});
+
+      const result = await deps().fetchLiveSignal();
+
+      expect(result).toEqual({ status: "UNKNOWN" });
+    });
+
+    it("returns UNKNOWN and logs, without rethrowing, when $fetch throws", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockRejectedValue(new Error("network down"));
+      const consoleLogSpy = vi
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      const consoleErrorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      useChzzk({});
+
+      await expect(deps().fetchLiveSignal()).resolves.toEqual({
+        status: "UNKNOWN",
+      });
+      expect(consoleLogSpy).toHaveBeenCalledWith("Chzzk fetchLiveSignal Error");
+      expect(consoleErrorSpy).toHaveBeenCalled();
+
+      consoleLogSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe("fetchSubscriptionHealth (deps passed to createChzzkConnection)", () => {
+    it("returns UNKNOWN and logs the upstream error on an ERROR envelope", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "ERROR",
+        code: "internal_server_error",
+        error: "boom",
+      });
+      const consoleLogSpy = vi
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      useChzzk({});
+
+      const result = await deps().fetchSubscriptionHealth("sess-1");
+
+      expect(result).toBe("UNKNOWN");
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        "Chzzk fetchSubscriptionHealth Error (UNKNOWN): boom",
+      );
+
+      consoleLogSpy.mockRestore();
+    });
+
+    it("returns SUBSCRIBED when the session is connected with a matching CHAT subscription", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "OK",
+        sessions: [
+          {
+            sessionKey: "sess-1",
+            connectedDate: "2026-07-27T00:00:00",
+            disconnectedDate: null,
+            subscribedEvents: [{ eventType: "CHAT", channelId: "chan-1" }],
+          },
+        ],
+      });
+      useChzzk({});
+
+      const result = await deps().fetchSubscriptionHealth("sess-1");
+
+      expect(result).toBe("SUBSCRIBED");
+    });
+
+    it("returns LOST and logs the offending session when disconnectedDate is set", async () => {
+      const session = {
+        sessionKey: "sess-1",
+        connectedDate: "2026-07-27T00:00:00",
+        disconnectedDate: "2026-07-27T01:00:00",
+        subscribedEvents: [{ eventType: "CHAT", channelId: "chan-1" }],
+      };
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({ status: "OK", sessions: [session] });
+      const consoleLogSpy = vi
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      useChzzk({});
+
+      const result = await deps().fetchSubscriptionHealth("sess-1");
+
+      expect(result).toBe("LOST");
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        "Chzzk subscription health: LOST",
+        session,
+      );
+
+      consoleLogSpy.mockRestore();
+    });
+
+    it("returns LOST when connected but there is no matching CHAT subscribedEvent", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "OK",
+        sessions: [
+          {
+            sessionKey: "sess-1",
+            connectedDate: "2026-07-27T00:00:00",
+            disconnectedDate: null,
+            subscribedEvents: [{ eventType: "DONATION", channelId: "chan-1" }],
+          },
+        ],
+      });
+      useChzzk({});
+
+      const result = await deps().fetchSubscriptionHealth("sess-1");
+
+      expect(result).toBe("LOST");
+    });
+
+    it("returns UNKNOWN and logs the pagination-caveat reasoning when the session is absent from the list", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({ status: "OK", sessions: [] });
+      const consoleLogSpy = vi
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      useChzzk({});
+
+      const result = await deps().fetchSubscriptionHealth("sess-1");
+
+      expect(result).toBe("UNKNOWN");
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        expect.stringContaining("absent from list"),
+      );
+
+      consoleLogSpy.mockRestore();
+    });
+
+    it("returns UNKNOWN and logs, without rethrowing, when $fetch throws", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockRejectedValue(new Error("network down"));
+      const consoleLogSpy = vi
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      const consoleErrorSpy = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      useChzzk({});
+
+      await expect(deps().fetchSubscriptionHealth("sess-1")).resolves.toBe(
+        "UNKNOWN",
+      );
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        "Chzzk fetchSubscriptionHealth Error (UNKNOWN)",
+      );
+      expect(consoleErrorSpy).toHaveBeenCalled();
+
+      consoleLogSpy.mockRestore();
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
   describe("checkAuth (polled via useTimeoutPoll, immediate)", () => {
     it("hides both errors and never calls $fetch when chzzkChannelId is unset", async () => {
       setUp();

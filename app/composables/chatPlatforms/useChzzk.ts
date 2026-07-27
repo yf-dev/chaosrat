@@ -8,12 +8,15 @@ import type {
   ChatPlatformError,
   ChzzkMeResponse,
   ChzzkAuthLoginResponse,
+  ChzzkChatChannelIdResponse,
+  ChzzkSessionListResponse,
 } from "~/lib/interfaces";
 import {
   createChzzkConnection,
   type ChzzkChatSessionMessage,
   type ChzzkSessionMessageData,
 } from "~/lib/chzzkConnection";
+import { toLiveSignal, toSubscriptionHealth } from "~/lib/chzzkSignals";
 import { useSharedConnection } from "../useSharedConnection";
 
 interface ChzzkMessage {
@@ -188,6 +191,77 @@ export function useChzzk(options: {
         showLoginError();
       } else {
         hideLoginError();
+      }
+    },
+    // Watchdog probes for the "new broadcast started under a still-healthy
+    // socket" bug: CHZZK can drop the CHAT subscription server-side on a
+    // stream transition while the socket itself stays connected, so nothing
+    // in the socket lifecycle ever notices. Both deps are best-effort
+    // diagnostics layered on top of the unofficial/scope-uncertain HTTP
+    // endpoints below; see lib/chzzkConnection.ts for how the watchdog
+    // treats their results (never reconnects on UNKNOWN, only on a
+    // confirmed OPEN-with-new-id or a confirmed LOST).
+    fetchLiveSignal: async () => {
+      if (!chatOptions.value.chzzkChannelId) {
+        return { status: "UNKNOWN" };
+      }
+      try {
+        const data = await $fetch<ChzzkChatChannelIdResponse | ApiError>(
+          "/api/chzzk/chatChannelId",
+          {
+            query: { channelId: chatOptions.value.chzzkChannelId },
+            timeout: 5000,
+          },
+        );
+        const signal = toLiveSignal(data);
+        if (signal.status === "OPEN" && signal.chatChannelId) {
+          // This is the line that shows a new broadcast being detected.
+          console.log("Chzzk live signal: chatChannelId", signal.chatChannelId);
+        }
+        return signal;
+      } catch (error) {
+        console.log("Chzzk fetchLiveSignal Error");
+        console.error(error);
+        return { status: "UNKNOWN" };
+      }
+    },
+    fetchSubscriptionHealth: async (sessionKey) => {
+      // The approved Chzzk Open API scopes do permit GET /open/v1/sessions --
+      // verified against a live login (see server/api/chzzk/session/list.ts).
+      // Any failure that does happen resolves to "UNKNOWN" below (via the
+      // ERROR envelope branch) and the watchdog degrades to the live-signal
+      // trigger alone -- by design, not a bug to work around.
+      try {
+        const data = await $fetch<ChzzkSessionListResponse | ApiError>(
+          "/api/chzzk/session/list",
+          { timeout: 5000 },
+        );
+        if (data.status === "ERROR") {
+          console.log(
+            `Chzzk fetchSubscriptionHealth Error (UNKNOWN): ${data.error}`,
+          );
+          return "UNKNOWN";
+        }
+        const health = toSubscriptionHealth(
+          data.sessions,
+          sessionKey,
+          chatOptions.value.chzzkChannelId,
+        );
+        if (health === "LOST") {
+          const session = data.sessions.find(
+            (s) => s.sessionKey === sessionKey,
+          );
+          console.log("Chzzk subscription health: LOST", session);
+        } else if (health === "UNKNOWN") {
+          console.log(
+            `Chzzk subscription health: UNKNOWN (session ${sessionKey} absent from list -- list is paginated, this is not proof of loss)`,
+          );
+        }
+        return health;
+      } catch (error) {
+        console.log("Chzzk fetchSubscriptionHealth Error (UNKNOWN)");
+        console.error(error);
+        return "UNKNOWN";
       }
     },
   });

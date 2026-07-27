@@ -1,6 +1,7 @@
 import {
   createChzzkConnection,
   type ChzzkConnectionDeps,
+  type ChzzkLiveSignal,
   type ChzzkSocket,
   type ChzzkSocketHandlers,
   type SessionUrlResult,
@@ -74,6 +75,13 @@ function revokedMessage() {
   return JSON.stringify({
     type: "revoked",
     data: { eventType: "CHAT", channelId: "ch1" },
+  });
+}
+
+function unsubscribedMessage(eventType: "CHAT" | "DONATION") {
+  return JSON.stringify({
+    type: "unsubscribed",
+    data: { eventType, channelId: "ch1" },
   });
 }
 
@@ -856,5 +864,675 @@ describe("createChzzkConnection", () => {
     expect(conn.isRunning()).toBe(false);
     expect(h.unsubscribeChat).not.toHaveBeenCalled();
     expect(h.fetchSessionUrl).not.toHaveBeenCalled();
+  });
+
+  // Watchdog: SYSTEM `unsubscribed`, new-broadcast detection via
+  // fetchLiveSignal(), and the subscription-health probe via
+  // fetchSubscriptionHealth(). All of these funnel through the same
+  // forceReconnect() helper, so most assertions below just check for a
+  // fresh fetchSessionUrl()/createSocket() pair.
+
+  it("31. SYSTEM unsubscribed for CHAT forces a fresh session fetch and resubscribe; for DONATION it is a no-op", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "OK", url: "wss://first" })
+      .mockResolvedValueOnce({ status: "OK", url: "wss://second" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.subscribeChat).toHaveBeenCalledWith("sess-1");
+
+    const socket = h.latestSocket();
+    const callsBefore = h.fetchSessionUrl.mock.calls.length;
+
+    // DONATION unsubscribe: no effect at all.
+    socket.handlers.onMessage("SYSTEM", unsubscribedMessage("DONATION"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore);
+    expect(socket.close).not.toHaveBeenCalled();
+
+    // CHAT unsubscribe: forces an immediate reconnect (no backoff wait).
+    socket.handlers.onMessage("SYSTEM", unsubscribedMessage("CHAT"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(socket.close).toHaveBeenCalled();
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore + 1);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    expect(h.createSocket.mock.calls[1][0]).toBe("wss://second");
+
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-2"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.subscribeChat).toHaveBeenCalledWith("sess-2");
+
+    await conn.stop();
+  });
+
+  it("32. the first fetchLiveSignal OPEN observation only baselines chatChannelId, no reconnect", async () => {
+    const h = createHarness();
+    h.deps.fetchLiveSignal = vi.fn(async () => ({
+      status: "OPEN" as const,
+      chatChannelId: "chat-1",
+    }));
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = h.latestSocket();
+    const callsBefore = h.fetchSessionUrl.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+
+    expect(h.deps.fetchLiveSignal).toHaveBeenCalledTimes(1);
+    expect(socket.close).not.toHaveBeenCalled();
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore);
+
+    await conn.stop();
+  });
+
+  it("33. a changed chatChannelId reconnects exactly once and resubscribes; an unchanged one does not reconnect again", async () => {
+    const h = createHarness();
+    let chatChannelId = "chat-1";
+    h.deps.fetchLiveSignal = vi.fn(async () => ({
+      status: "OPEN" as const,
+      chatChannelId,
+    }));
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "OK", url: "wss://first" })
+      .mockResolvedValueOnce({ status: "OK", url: "wss://second" });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // First tick: baseline only, no reconnect yet.
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // New broadcast: chatChannelId changes -> exactly one reconnect.
+    chatChannelId = "chat-2";
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    expect(h.createSocket.mock.calls[1][0]).toBe("wss://second");
+
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-2"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.subscribeChat).toHaveBeenCalledWith("sess-2");
+
+    // Same chatChannelId again on later ticks: no further reconnect.
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+  });
+
+  it("34. OPEN-with-null/CLOSED/UNKNOWN signals are inert and never clear the recorded id (CLOSED-then-new-OPEN still reconnects)", async () => {
+    const h = createHarness();
+    const fetchLiveSignal = vi.fn();
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "OK", url: "wss://first" })
+      .mockResolvedValueOnce({ status: "OK", url: "wss://second" });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "chat-1",
+    }); // baseline
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: null,
+    });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    fetchLiveSignal.mockResolvedValueOnce({ status: "CLOSED" });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    fetchLiveSignal.mockResolvedValueOnce({ status: "UNKNOWN" });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // A genuinely new broadcast: the id recorded at the very first
+    // observation must still be intact, so this is correctly detected as a
+    // change (not mistaken for a fresh first observation).
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "chat-2",
+    });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    expect(h.createSocket.mock.calls[1][0]).toBe("wss://second");
+
+    await conn.stop();
+  });
+
+  it("35. fetchSubscriptionHealth 'LOST' forces a reconnect; 'SUBSCRIBED' and 'UNKNOWN' do not", async () => {
+    const h = createHarness();
+    const fetchSubscriptionHealth = vi.fn();
+    h.deps.fetchSubscriptionHealth = fetchSubscriptionHealth;
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "OK", url: "wss://first" })
+      .mockResolvedValueOnce({ status: "OK", url: "wss://second" });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    fetchSubscriptionHealth.mockResolvedValueOnce("SUBSCRIBED");
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(fetchSubscriptionHealth).toHaveBeenCalledWith("sess-1");
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    fetchSubscriptionHealth.mockResolvedValueOnce("UNKNOWN");
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    fetchSubscriptionHealth.mockResolvedValueOnce("LOST");
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    expect(h.createSocket.mock.calls[1][0]).toBe("wss://second");
+
+    await conn.stop();
+  });
+
+  it("36. a throwing fetchLiveSignal/fetchSubscriptionHealth is swallowed as UNKNOWN and does not kill later watchdog ticks", async () => {
+    const h = createHarness();
+    const fetchLiveSignal = vi.fn();
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    h.deps.fetchSubscriptionHealth = vi.fn(async () => {
+      throw new Error("subscription health boom");
+    });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    // Subscribe-time baseline capture (call 1) also throws.
+    fetchLiveSignal.mockRejectedValueOnce(new Error("live signal boom"));
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+
+    // First tick: fetchLiveSignal() throws again (call 2) -> treated as
+    // UNKNOWN, inert, still unbaselined. fetchSubscriptionHealth() is
+    // independent (not gated on the live signal) and also throws -> also
+    // inert. Neither kills the watchdog.
+    fetchLiveSignal.mockRejectedValueOnce(new Error("live signal boom 2"));
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(2);
+    expect(h.deps.fetchSubscriptionHealth).toHaveBeenCalledTimes(1);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // Second tick runs normally: fetchLiveSignal() now resolves (still no
+    // baseline recorded, so this only baselines) and fetchSubscriptionHealth()
+    // throws again -> still inert.
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "chat-1",
+    });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(3);
+    expect(h.deps.fetchSubscriptionHealth).toHaveBeenCalledTimes(2);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+  });
+
+  it("37. the watchdog stops firing after stop()", async () => {
+    const h = createHarness();
+    const fetchLiveSignal = vi.fn(async () => ({
+      status: "OPEN" as const,
+      chatChannelId: "chat-1",
+    }));
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval * 5);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it("38. a forced reconnect does not consume the backoff schedule: the next real socket failure still retries at the base delay", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Burn failureCount via one real socket failure first.
+    h.latestSocket().handlers.onError(new Error("connect_error"));
+    await vi.advanceTimersByTimeAsync(timings.retryBaseDelay);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    // A deliberate reconnect via `unsubscribed` must reset failureCount.
+    h.latestSocket().handlers.onMessage("SYSTEM", unsubscribedMessage("CHAT"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.createSocket).toHaveBeenCalledTimes(3);
+
+    // The next real failure must retry at the base delay (not doubled),
+    // proving the forced reconnect reset failureCount to 0.
+    const socket = h.latestSocket();
+    socket.handlers.onError(new Error("connect_error again"));
+    await vi.advanceTimersByTimeAsync(timings.retryBaseDelay - 1);
+    expect(h.createSocket).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.createSocket).toHaveBeenCalledTimes(4);
+
+    await conn.stop();
+  });
+
+  it("39. with fetchLiveSignal/fetchSubscriptionHealth both omitted, the watchdog timer fires but has no effect (regression guard)", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = h.latestSocket();
+    const callsBefore = h.fetchSessionUrl.mock.calls.length;
+
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval * 10);
+
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore);
+    expect(socket.close).not.toHaveBeenCalled();
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+  });
+
+  it("40. uses the documented default watchdogInterval (60s) when no timings override is given", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    h.deps.fetchLiveSignal = vi.fn(async () => ({
+      status: "OPEN" as const,
+      chatChannelId: "chat-1",
+    }));
+    const conn = createChzzkConnection(h.deps); // no `timings` arg -> defaults
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    await vi.advanceTimersByTimeAsync(60_000 - 1);
+    expect(h.deps.fetchLiveSignal).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.deps.fetchLiveSignal).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+  });
+
+  it("41. an in-flight watchdog tick is not re-entered by the next timer fire", async () => {
+    const h = createHarness();
+    let resolveSignal!: (v: ChzzkLiveSignal) => void;
+    const fetchLiveSignal = vi.fn(
+      () =>
+        new Promise<ChzzkLiveSignal>((res) => {
+          resolveSignal = res;
+        }),
+    );
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // First tick fires and leaves fetchLiveSignal() in flight.
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+
+    // The next timer fire happens while the first call is still pending: it
+    // must be a no-op, not a second concurrent fetchLiveSignal() call.
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+
+    // Resolve the first call: first-ever observation, so it only baselines.
+    resolveSignal({ status: "OPEN", chatChannelId: "chat-1" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // The watchdog resumes normal ticking afterwards.
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+  });
+
+  it("42. stop() called while a watchdog tick's fetchLiveSignal() is still pending prevents a stale changed-id result from forcing a reconnect", async () => {
+    const h = createHarness();
+    const fetchLiveSignal = vi.fn();
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    // Subscribe-time capture (call 1): baseline to "chat-1".
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "chat-1",
+    });
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // First watchdog tick starts (call 2), with fetchLiveSignal() left
+    // pending.
+    let resolveTick!: (v: ChzzkLiveSignal) => void;
+    fetchLiveSignal.mockImplementationOnce(
+      () =>
+        new Promise<ChzzkLiveSignal>((res) => {
+          resolveTick = res;
+        }),
+    );
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+    const callsBeforeResolve = h.createSocket.mock.calls.length;
+
+    // A late-arriving, changed chatChannelId must not force a reconnect on a
+    // connection that has already stopped.
+    resolveTick({ status: "OPEN", chatChannelId: "chat-2" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.createSocket.mock.calls.length).toBe(callsBeforeResolve);
+  });
+
+  // Follow-up fix: the rule "the first observation only baselines" assumed
+  // the connection is always established while a broadcast is already live.
+  // The dominant real-world order is the opposite -- OBS starts (and
+  // subscribes) while the channel is offline, and only later goes live. The
+  // baseline must therefore be captured at *subscribe time*
+  // (captureLiveSignalBaseline(), fired from handleSubscribe()'s success
+  // path), not at the watchdog's own first tick, or that transition is
+  // missed entirely. lastChatChannelId is now `string | null | undefined`:
+  // `null` is a real recorded baseline ("subscribed while offline"), not an
+  // absence.
+
+  it("43. a subscription established while the channel was offline reconnects on the very next real broadcast (the OBS-starts-before-going-live case)", async () => {
+    const h = createHarness();
+    const fetchLiveSignal = vi.fn();
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "OK", url: "wss://first" })
+      .mockResolvedValueOnce({ status: "OK", url: "wss://second" });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    // Subscribe happens while the channel is offline.
+    fetchLiveSignal.mockResolvedValueOnce({ status: "CLOSED" });
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // The broadcaster goes live: the very first watchdog tick that observes
+    // the new broadcast must reconnect immediately. Under the old "baseline
+    // at first tick" rule this real id would have been mistaken for a first
+    // observation and only baselined, silently missing the broadcast.
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "chat-1",
+    });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    expect(h.createSocket.mock.calls[1][0]).toBe("wss://second");
+
+    await conn.stop();
+  });
+
+  it("44. a subscription established during broadcast A is unaffected while A continues, and reconnects exactly once when B starts", async () => {
+    const h = createHarness();
+    const fetchLiveSignal = vi.fn();
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "OK", url: "wss://first" })
+      .mockResolvedValueOnce({ status: "OK", url: "wss://second" });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    // Subscribe happens during broadcast "A".
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "A",
+    });
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+
+    // Same broadcast continues: no reconnect.
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "A",
+    });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // A different broadcast starts: exactly one reconnect.
+    fetchLiveSignal.mockResolvedValue({ status: "OPEN", chatChannelId: "B" });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    expect(h.createSocket.mock.calls[1][0]).toBe("wss://second");
+
+    // "B" continues afterwards: no further reconnect.
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+  });
+
+  it("45. a subscribe-time fetchLiveSignal() that can't tell (throws) leaves the connection unbaselined until a later tick observes a real id", async () => {
+    const h = createHarness();
+    const fetchLiveSignal = vi.fn();
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "OK", url: "wss://first" })
+      .mockResolvedValueOnce({ status: "OK", url: "wss://second" });
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    // Subscribe-time capture can't tell.
+    fetchLiveSignal.mockRejectedValueOnce(new Error("boom"));
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // First tick observes a real id for the first time: still no baseline
+    // existed, so this only records it -- we genuinely cannot tell whether
+    // this broadcast predates the subscription.
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "chat-1",
+    });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    // Second tick: a different id is now a genuine change -> reconnect.
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "chat-2",
+    });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    expect(h.createSocket.mock.calls[1][0]).toBe("wss://second");
+
+    await conn.stop();
+  });
+
+  it("46. a slow/hanging subscribe-time fetchLiveSignal() does not delay or break the subscribe success path", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    let resolveSignal: ((v: ChzzkLiveSignal) => void) | undefined;
+    h.deps.fetchLiveSignal = vi.fn(
+      () =>
+        new Promise<ChzzkLiveSignal>((res) => {
+          resolveSignal = res;
+        }),
+    );
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    // subscribeChat() already succeeded and failureCount was reset without
+    // waiting on fetchLiveSignal(), which is still hanging.
+    expect(h.subscribeChat).toHaveBeenCalledWith("sess-1");
+    expect(resolveSignal).toBeDefined();
+    expect(h.latestSocket().close).not.toHaveBeenCalled();
+
+    // A real socket failure right after must retry at the (unconsumed) base
+    // delay, proving the pending baseline capture never touched failureCount
+    // or otherwise blocked the connection's own state machine.
+    h.latestSocket().handlers.onError(new Error("connect_error"));
+    await vi.advanceTimersByTimeAsync(timings.retryBaseDelay - 1);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+
+    // The still-pending capture resolving well after stop() must not throw.
+    expect(() =>
+      resolveSignal?.({ status: "OPEN", chatChannelId: "chat-1" }),
+    ).not.toThrow();
+    await vi.advanceTimersByTimeAsync(0);
+  });
+
+  it("47. a subscribe-time fetchLiveSignal() that resolves after stop() does not throw and has no observable effect", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    let resolveSignal!: (v: ChzzkLiveSignal) => void;
+    h.deps.fetchLiveSignal = vi.fn(
+      () =>
+        new Promise<ChzzkLiveSignal>((res) => {
+          resolveSignal = res;
+        }),
+    );
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    await conn.stop();
+
+    expect(() =>
+      resolveSignal({ status: "OPEN", chatChannelId: "chat-1" }),
+    ).not.toThrow();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+  });
+
+  it("48. a subscribe-time fetchLiveSignal() that resolves after a newer generation exists does not overwrite the newer baseline", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl
+      .mockResolvedValueOnce({ status: "OK", url: "wss://first" })
+      .mockResolvedValueOnce({ status: "OK", url: "wss://second" });
+    const resolvers: ((v: ChzzkLiveSignal) => void)[] = [];
+    const fetchLiveSignal = vi.fn(
+      () =>
+        new Promise<ChzzkLiveSignal>((res) => {
+          resolvers.push(res);
+        }),
+    );
+    h.deps.fetchLiveSignal = fetchLiveSignal;
+    const wt = { ...timings, watchdogInterval: 10_000 };
+    const conn = createChzzkConnection(h.deps, wt);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(1); // resolvers[0], gen 1
+
+    // Force a reconnect (bumps generation) while the first baseline capture
+    // is still pending.
+    h.latestSocket().handlers.onMessage("SYSTEM", unsubscribedMessage("CHAT"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    // The new subscription re-captures its own baseline.
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-2"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchLiveSignal).toHaveBeenCalledTimes(2); // resolvers[1], gen 2
+
+    // The current (newer) baseline resolves first, to "fresh".
+    resolvers[1]({ status: "OPEN", chatChannelId: "fresh" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The stale capture from before the reconnect resolves afterwards, with
+    // a *different* id. It must be discarded, not overwrite the current
+    // baseline.
+    resolvers[0]({ status: "OPEN", chatChannelId: "stale-value" });
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Proof: a tick reporting the same id as the (correct) newer baseline
+    // must not reconnect. If the stale write had won instead, this "fresh"
+    // would look like a change from "stale-value" and wrongly reconnect.
+    fetchLiveSignal.mockResolvedValueOnce({
+      status: "OPEN",
+      chatChannelId: "fresh",
+    });
+    await vi.advanceTimersByTimeAsync(wt.watchdogInterval);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+  });
+
+  it("49. fetchLiveSignal omitted entirely -> subscribing has no extra side effect (regression guard)", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", connectedMessage("sess-1"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.subscribeChat).toHaveBeenCalledWith("sess-1");
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+    expect(h.latestSocket().close).not.toHaveBeenCalled();
+
+    await conn.stop();
   });
 });
