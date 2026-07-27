@@ -72,6 +72,70 @@ describe("server/api/chzzk/auth/callback", () => {
     });
   });
 
+  it.each([
+    ["//evil.example", "protocol-relative"],
+    ["//evil.example/phish?x=1", "protocol-relative with path/query"],
+    ["/\\evil.example", "single backslash (browsers normalise to /)"],
+    ["/\\/evil.example", "backslash-then-slash (browsers normalise to //)"],
+  ])(
+    "rejects an unsafe oauth_redirect cookie (%s, %s)",
+    async (unsafeRedirect) => {
+      const handler = (await import("~/server/api/chzzk/auth/callback"))
+        .default;
+      const { event } = createMockEvent({
+        url: "/api/chzzk/auth/callback?code=abc123&state=good-state",
+        headers: {
+          cookie: `oauth_state=good-state; oauth_redirect=${encodeURIComponent(
+            unsafeRedirect,
+          )}`,
+        },
+      });
+
+      const result = await handler(event);
+
+      expect(result).toEqual({
+        status: "ERROR",
+        code: "invalid_redirect",
+        error: "Invalid redirect URL",
+      });
+    },
+  );
+
+  it.each(["/", "/chat", "/chat?theme=cute-left&maxChatSize=100"])(
+    "allows a legitimate same-origin oauth_redirect cookie (%s)",
+    async (safeRedirect) => {
+      globalThis.$fetch = vi.fn().mockResolvedValue({
+        code: 200,
+        message: null,
+        content: {
+          accessToken: "fake-access-token",
+          refreshToken: "fake-refresh-token",
+          tokenType: "Bearer",
+          expiresIn: 3600,
+          scope: "chat",
+        },
+      }) as unknown as typeof globalThis.$fetch;
+
+      const handler = (await import("~/server/api/chzzk/auth/callback"))
+        .default;
+      const { event, getResponseHeader } = createMockEvent({
+        url: "/api/chzzk/auth/callback?code=abc123&state=good-state",
+        headers: {
+          cookie: `oauth_state=good-state; oauth_redirect=${encodeURIComponent(
+            safeRedirect,
+          )}`,
+        },
+      });
+
+      const result = await handler(event);
+
+      expect(result).not.toEqual(
+        expect.objectContaining({ code: "invalid_redirect" }),
+      );
+      expect(getResponseHeader("location")).toBe(safeRedirect);
+    },
+  );
+
   it("exchanges the code, sets the three token cookies, and redirects on success", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       code: 200,

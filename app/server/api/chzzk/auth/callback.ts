@@ -39,8 +39,19 @@ export default defineEventHandler(async (event): Promise<void | ApiError> => {
       redirectTo = "/";
     }
 
-    // Check redirect URL
-    if (typeof redirectTo !== "string" || !redirectTo.startsWith("/")) {
+    // Check redirect URL: must be a same-origin relative path only.
+    // `redirectTo.startsWith("/")` alone is not enough — "//evil.example"
+    // also starts with "/" but browsers resolve it as a protocol-relative
+    // URL to a different origin (an open redirect). Reject a leading "//"
+    // to close that. A backslash is rejected too, since browsers normalise
+    // "\" to "/" per the WHATWG URL spec, so "/\evil.example" and
+    // "/\/evil.example" are equivalent bypasses of the same check.
+    if (
+      typeof redirectTo !== "string" ||
+      !redirectTo.startsWith("/") ||
+      redirectTo.startsWith("//") ||
+      redirectTo.includes("\\")
+    ) {
       return {
         status: "ERROR",
         code: "invalid_redirect",
