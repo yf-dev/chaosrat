@@ -68,6 +68,17 @@
     "vitest": "^4.1.10",
     "vue-tsc": "^3.3.8"
   },
+  "overrides": {
+    "axios": "^1.18.1",
+    "js-yaml": "^4.3.0",
+    "flatted": "^3.4.3",
+    "brace-expansion": "^5.0.8",
+    "socket.io-parser": "~3.3.6",
+    "engine.io-client": {
+      "ws": "^7.5.10",
+      "xmlhttprequest-ssl": "^1.6.3"
+    }
+  },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,vue}": [
       "eslint --fix",
