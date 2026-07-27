@@ -17,6 +17,13 @@ coverage
 logs
 *.log
 
+# ONE-Mobile-POP webfont, fetched by scripts/fetch-fonts.mjs at install time.
+# Deliberately NOT committed: its license permits embedding on our own server
+# but prohibits redistribution, and this is a public MIT repo -- committing
+# the file would make it trivially extractable as a standalone asset. See
+# scripts/fetch-fonts.mjs's header comment for the full reasoning.
+public/fonts/
+
 # Misc
 .DS_Store
 .fleet

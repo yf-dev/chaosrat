@@ -8,7 +8,7 @@
     "dev": "nuxt dev --host 0.0.0.0 --port 3000",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare",
+    "postinstall": "node scripts/fetch-fonts.mjs && nuxt prepare",
     "clean": "nuxt cleanup",
     "test": "vitest run",
     "test:watch": "vitest",

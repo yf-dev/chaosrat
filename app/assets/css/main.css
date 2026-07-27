@@ -3,10 +3,16 @@
 
 /* Load fonts */
 @import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+/* Served from our own server, not the jsDelivr CDN: the font's license
+   permits embedding on a website/program server but prohibits
+   redistribution, so the file is fetched into public/fonts/ by
+   scripts/fetch-fonts.mjs at install time rather than committed -- see that
+   script's header comment for the full reasoning. public/fonts/ is
+   gitignored on purpose; run `node scripts/fetch-fonts.mjs` (or `npm
+   install`) if this 404s locally. */
 @font-face {
   font-family: "ONE-Mobile-POP";
-  src: url("https://cdn.jsdelivr.net/gh/projectnoonnu/noonfonts_2105_2@1.0/ONE-Mobile-POP.woff")
-    format("woff");
+  src: url("/fonts/ONE-Mobile-POP.woff") format("woff");
   font-weight: normal;
   font-style: normal;
 }
