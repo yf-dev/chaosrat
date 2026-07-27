@@ -29,6 +29,13 @@ defineProps<{
 
 <style scoped>
 .chat-container {
+  /* Pure's own tokens — scoped here on purpose (see DESIGN.md's
+     per-theme-design-system principle): no other theme can reach these.
+     The item margin and the nickname-icon's margin-right both happen to be
+     0.8rem, but one is the item's outer gutter and the other is the gap
+     before the message text — separate decisions, left as plain literals. */
+  --dot-size: 1.2rem; /* nickname-icon width == height */
+
   position: relative;
   height: 100vh;
   width: 100vw;
@@ -51,8 +58,8 @@ defineProps<{
 
 .nickname-icon {
   display: inline-block;
-  width: 1.2rem;
-  height: 1.2rem;
+  width: var(--dot-size);
+  height: var(--dot-size);
   border: 0.2rem solid rgba(0, 0, 0, 0.1);
   border-radius: 0.9rem;
   /* vertical-align: middle; */
@@ -64,13 +71,13 @@ defineProps<{
 }
 
 .message :deep(.emoji) {
-  height: 1.8rem;
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .message :deep(.sticker) {
-  width: 10rem;
-  height: 10rem;
+  width: var(--chat-sticker-size);
+  height: var(--chat-sticker-size);
   vertical-align: middle;
 }
 </style>

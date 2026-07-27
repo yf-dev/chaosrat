@@ -8,18 +8,22 @@
             class="icon"
             :src="iconUrl(chat.platform)"
           />
-          <img
-            v-for="(url, badgeId) in chat.extra.badges ?? {}"
-            :key="badgeId"
-            class="badge"
-            :src="url"
-          />
+          <div
+            v-if="Object.keys(chat.extra.badges ?? {}).length > 0"
+            class="badge-box"
+          >
+            <img
+              v-for="(url, badgeId) in chat.extra.badges ?? {}"
+              :key="badgeId"
+              class="badge"
+              :src="url"
+            />
+          </div>
           <div class="nickname">
             <TextWithShadow
               :shadow-size="0.1"
               :style="{
                 display: 'inline',
-                color: hashToColor(hashCode(chat.nickname), 100, 70),
               }"
             >
               {{ chat.nickname }}
@@ -38,7 +42,7 @@
 
 <script setup lang="ts">
 import type { ChatItem } from "~/lib/interfaces";
-import { hashCode, messageHtml, hashToColor, iconUrl } from "~/lib/utils";
+import { messageHtml, iconUrl } from "~/lib/utils";
 
 defineProps<{
   chatItems: ChatItem[];
@@ -50,66 +54,72 @@ const { chatOptions } = storeToRefs(chatOptionsStore);
 
 <style scoped>
 .chat-container {
+  /* Default's own tokens — scoped here on purpose (see DESIGN.md's
+     per-theme-design-system principle): no other theme can reach these. */
+  --gap: 0.6rem; /* nickname-box / badge-box internal gap */
+  --plate: rgba(0, 0, 0, 0.3); /* translucent backdrop, item + nickname-box */
+  --pad: 0.8rem; /* nickname-box and message padding */
+
   position: relative;
   height: 100vh;
   width: 100vw;
   overflow-wrap: break-word;
 }
-
 .list {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
 }
-
 .item {
   position: relative;
-  margin: 0.4rem 0.8rem;
+  background-color: var(--plate);
+  margin: 0.8rem;
   color: rgba(255, 255, 255, 1);
-  line-height: 2.5rem;
 }
 
 .nickname-box {
-  display: inline;
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
+  padding: var(--pad);
+  background-color: var(--plate);
 }
 
 .icon {
-  display: inline-block;
-  width: 1.8rem;
-  height: 1.8rem;
+  width: var(--chat-icon-size);
+  height: var(--chat-icon-size);
   vertical-align: middle;
-  margin-right: 0.4rem;
-  margin-bottom: 0.2rem;
+}
+
+.badge-box {
+  display: flex;
+  align-items: center;
+  gap: var(--gap);
 }
 
 .badge {
-  display: inline-block;
-  width: 1.8rem;
-  height: 1.8rem;
+  width: var(--chat-icon-size);
+  height: var(--chat-icon-size);
   vertical-align: middle;
-  margin-right: 0.4rem;
-  margin-bottom: 0.2rem;
 }
 
 .nickname {
-  display: inline-block;
   font-weight: bold;
-  margin-right: 0.8rem;
 }
 
 .message {
-  display: inline;
+  padding: var(--pad);
 }
 
 .message :deep(.emoji) {
-  height: 1.8rem;
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .message :deep(.sticker) {
-  width: 10rem;
-  height: 10rem;
+  width: var(--chat-sticker-size);
+  height: var(--chat-sticker-size);
   vertical-align: middle;
 }
 </style>

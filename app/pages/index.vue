@@ -8,20 +8,23 @@
     <div class="card input-card">
       <div class="row">
         <div class="col-2">
-          <label for="chzzkChannelId">치지직 채널 ID</label>
+          <span>치지직 채널 ID</span>
         </div>
         <div class="col input-with-prefix">
           <p>
             <span v-if="!isChzzkLoggedIn">
               치지직 채널에 연결하기 위해서는 먼저
-              <a class="link" @click.prevent="loginToChzzk">치지직 로그인</a>이
-              필요합니다.<br />
+              <button class="link" type="button" @click="loginToChzzk">
+                치지직 로그인</button
+              >이 필요합니다.<br />
             </span>
             <span v-else>
-              현재 로그인한 치지직 채널: {{ chzzkMeChannelName }}(<a
+              현재 로그인한 치지직 채널: {{ chzzkMeChannelName }}(<button
                 class="link"
-                @click.prevent="logoutFromChzzk"
-                >로그아웃</a
+                type="button"
+                @click="logoutFromChzzk"
+              >
+                로그아웃</button
               >)<br />
             </span>
           </p>
@@ -186,6 +189,7 @@
             </select>
           </div>
           <div v-if="soundEffectType === 'custom'">
+            <label for="soundEffectCustomUrl">효과음 URL</label>
             <input
               id="soundEffectCustomUrl"
               type="text"
@@ -228,44 +232,47 @@
         </div>
       </div>
       <div class="row">
-        <div class="col-2">
-          <label>기타 옵션</label>
-        </div>
-        <div class="col">
-          <div>
-            <input
-              id="isUseOpenDcconSelector"
-              type="checkbox"
-              class="form-check-input"
-              :checked="isUseOpenDcconSelector"
-              :disabled="!twitchChannel"
-              @change="
-                isUseOpenDcconSelector = ($event.target as HTMLInputElement)
-                  .checked
-              "
-            />
-            <label class="form-check-label" for="isUseOpenDcconSelector">
-              Open Dccon Selector에서 스티커 불러오기
-              <span class="tooltip" title="트위치 채널 ID를 설정해야 동작합니다"
-                >?</span
-              >
-            </label>
+        <fieldset class="option-group">
+          <legend class="col-2">기타 옵션</legend>
+          <div class="col">
+            <div>
+              <input
+                id="isUseOpenDcconSelector"
+                type="checkbox"
+                class="form-check-input"
+                :checked="isUseOpenDcconSelector"
+                :disabled="!twitchChannel"
+                @change="
+                  isUseOpenDcconSelector = ($event.target as HTMLInputElement)
+                    .checked
+                "
+              />
+              <label class="form-check-label" for="isUseOpenDcconSelector">
+                Open Dccon Selector에서 스티커 불러오기
+                <span
+                  class="tooltip"
+                  title="트위치 채널 ID를 설정해야 동작합니다"
+                  >?</span
+                >
+              </label>
+            </div>
+            <div>
+              <input
+                id="isHidePlatformIcon"
+                type="checkbox"
+                class="form-check-input"
+                :checked="isHidePlatformIcon"
+                @change="
+                  isHidePlatformIcon = ($event.target as HTMLInputElement)
+                    .checked
+                "
+              />
+              <label class="form-check-label" for="isHidePlatformIcon">
+                플랫폼 아이콘 숨기기
+              </label>
+            </div>
           </div>
-          <div>
-            <input
-              id="isHidePlatformIcon"
-              type="checkbox"
-              class="form-check-input"
-              :checked="isHidePlatformIcon"
-              @change="
-                isHidePlatformIcon = ($event.target as HTMLInputElement).checked
-              "
-            />
-            <label class="form-check-label" for="isHidePlatformIcon">
-              플랫폼 아이콘 숨기기
-            </label>
-          </div>
-        </div>
+        </fieldset>
       </div>
     </div>
     <div class="card result-card">
@@ -507,11 +514,7 @@ body.index {
   --grid-gutter: 2rem;
   --font-size: 1.6rem;
   --font-color: #333333;
-  --font-family-sans:
-    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
-    system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo",
-    "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji",
-    "Segoe UI Symbol", sans-serif;
+  --font-family-sans: var(--chat-font-sans);
   --font-family-mono: monaco, "Consolas", "Lucida Console", monospace;
 }
 </style>
@@ -539,6 +542,11 @@ body.index {
 }
 
 .link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  display: inline;
   color: var(--color-primary);
   cursor: pointer;
 }
@@ -572,5 +580,39 @@ body.index {
   margin: 2rem 0;
   padding-top: 2rem;
   justify-content: center;
+}
+
+/* The "기타 옵션" group is a <fieldset>/<legend> for correct group
+   semantics, but browsers wrap a fieldset's non-legend children in an
+   internal anonymous box that does not behave as a normal flex item (it
+   ignores the flex-basis chota's .col sets and wraps onto its own line
+   instead of sitting beside the legend). `display: contents` removes the
+   fieldset's own generated box so its children (the legend and the .col
+   div) become direct flex items of the surrounding .row, exactly like
+   every other row on this page — while <legend> stays a real DOM child of
+   <fieldset>, which is all the accessible-name association requires. */
+.option-group {
+  display: contents;
+}
+
+legend {
+  /* Chrome sizes <legend> to fit its content regardless of the flex-basis
+     `.col-2` sets, so it must be forced to fill the flex item explicitly.
+     `margin` is left alone: chota's `[class^="col-"]` rule supplies the
+     +margin that lines columns up with the gutter, and a scoped
+     `legend { margin: 0 }` would outrank it (Vue's scoping attribute bumps
+     the type selector's specificity above a plain class selector). */
+  width: 100%;
+  padding: 0;
+  text-transform: none;
+  font-size: inherit;
+  letter-spacing: normal;
+}
+
+input:focus-visible,
+select:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 </style>

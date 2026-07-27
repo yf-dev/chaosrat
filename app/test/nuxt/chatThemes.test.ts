@@ -1,14 +1,14 @@
 import { mountSuspended, mockNuxtImport } from "@nuxt/test-utils/runtime";
 import { ref } from "vue";
 import type { ChatItem, ChatOptions } from "~/lib/interfaces";
-import DefaultChatList from "~/components/themes/DefaultChatList.vue";
-import ColorfulChatList from "~/components/themes/ColorfulChatList.vue";
-import VideoMasterChatList from "~/components/themes/VideoMasterChatList.vue";
-import SimpleChatList from "~/components/themes/SimpleChatList.vue";
-import PureChatList from "~/components/themes/PureChatList.vue";
-import CuteChatBaseList from "~/components/themes/CuteChatBaseList.vue";
-import CuteChatLeftList from "~/components/themes/CuteChatLeftList.vue";
-import CuteChatRightList from "~/components/themes/CuteChatRightList.vue";
+import DefaultChatList from "~/components/themes/default/DefaultChatList.vue";
+import ColorfulChatList from "~/components/themes/colorful/ColorfulChatList.vue";
+import VideoMasterChatList from "~/components/themes/video-master/VideoMasterChatList.vue";
+import SimpleChatList from "~/components/themes/simple/SimpleChatList.vue";
+import PureChatList from "~/components/themes/pure/PureChatList.vue";
+import CuteChatBaseList from "~/components/themes/cute/CuteChatBaseList.vue";
+import CuteChatLeftList from "~/components/themes/cute/CuteChatLeftList.vue";
+import CuteChatRightList from "~/components/themes/cute/CuteChatRightList.vue";
 
 // All theme components except PureChatList call `useChatOptionsStore()`
 // (directly, or -- for CuteChatLeftList/CuteChatRightList -- transitively

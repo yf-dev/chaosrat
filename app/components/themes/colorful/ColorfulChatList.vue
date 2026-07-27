@@ -71,27 +71,18 @@ const nicknameColorMap: CSSProperties[] = [
 
 <style scoped>
 .chat-container {
+  /* Colorful's own tokens — scoped here on purpose (see DESIGN.md's
+     per-theme-design-system principle): no other theme can reach these. */
+  --gap: 0.4rem; /* nickname-box / badge-box internal gap */
+  --plate: rgb(58, 58, 58); /* item card background */
+  --corner: 0.4rem; /* item / nickname-box border radius */
+  --pad: 0.8rem; /* item horizontal margin, nickname-box padding, message horizontal/bottom padding */
+
   position: relative;
   height: 100vh;
   width: 100vw;
   overflow-wrap: break-word;
-  font-family:
-    "ONE-Mobile-POP",
-    "Pretendard Variable",
-    Pretendard,
-    -apple-system,
-    BlinkMacSystemFont,
-    system-ui,
-    Roboto,
-    "Helvetica Neue",
-    "Segoe UI",
-    "Apple SD Gothic Neo",
-    "Noto Sans KR",
-    "Malgun Gothic",
-    "Apple Color Emoji",
-    "Segoe UI Emoji",
-    "Segoe UI Symbol",
-    sans-serif;
+  font-family: var(--font-family-display);
 }
 .list {
   position: absolute;
@@ -101,12 +92,12 @@ const nicknameColorMap: CSSProperties[] = [
 }
 .item {
   position: relative;
-  background-color: rgb(58, 58, 58);
-  margin: 1.4rem 0.8rem;
+  background-color: var(--plate);
+  margin: 1.4rem var(--pad);
   color: rgba(255, 255, 255, 1);
   transform: rotateZ(-3deg);
   transform-origin: top left;
-  border-radius: 0.4rem;
+  border-radius: var(--corner);
 }
 
 .nickname-box {
@@ -114,43 +105,43 @@ const nicknameColorMap: CSSProperties[] = [
   align-items: center;
   width: 80%;
   max-width: 50ch;
-  gap: 0.4rem;
-  padding: 0.8rem;
+  gap: var(--gap);
+  padding: var(--pad);
   transform: rotateZ(-2deg) translate(-0.6rem, 0.6rem);
   transform-origin: top left;
-  border-radius: 0.4rem;
+  border-radius: var(--corner);
 }
 
 .icon {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: var(--chat-icon-size);
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .badge-box {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--gap);
 }
 
 .badge {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: var(--chat-icon-size);
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .message {
-  padding: 1.2rem 0.8rem 0.8rem;
+  padding: 1.2rem var(--pad) var(--pad);
 }
 
 .message :deep(.emoji) {
-  height: 1.8rem;
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .message :deep(.sticker) {
-  width: 10rem;
-  height: 10rem;
+  width: var(--chat-sticker-size);
+  height: var(--chat-sticker-size);
   vertical-align: middle;
 }
 </style>

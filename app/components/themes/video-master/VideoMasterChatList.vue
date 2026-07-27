@@ -66,6 +66,18 @@ const { chatOptions } = storeToRefs(chatOptionsStore);
 
 <style scoped>
 .chat-container {
+  /* Video-master's own tokens — scoped here on purpose (see DESIGN.md's
+     per-theme-design-system principle): no other theme can reach these.
+     nickname-box's own `gap: 1rem` (space between icon-box/chevron/
+     badge-box/nickname) is a separate decision from the cell padding below
+     even though it shares the number, so it stays a plain literal. */
+  --gap: 0.6rem; /* badge-box internal gap */
+  --rule: rgb(51, 51, 51); /* every divider/border line in this table layout */
+  --muted-text: rgb(136, 136, 136); /* secondary text: item + header cell */
+  --icon-col-width: 4rem; /* fixed icon column width, row + header */
+  --cell-pad-v: 0.4rem; /* row cell vertical padding: nickname/message/header */
+  --cell-pad-h: 1rem; /* row cell horizontal padding: nickname/message/header */
+
   position: relative;
   height: 100vh;
   width: 100vw;
@@ -80,20 +92,20 @@ const { chatOptions } = storeToRefs(chatOptionsStore);
 }
 .item {
   position: relative;
-  color: rgb(136, 136, 136);
-  border-top: 1px solid rgb(51, 51, 51);
+  color: var(--muted-text);
+  border-top: 1px solid var(--rule);
 }
 
 .nickname-box {
   display: flex;
   align-items: center;
   gap: 1rem;
-  border-bottom: 1px solid rgb(51, 51, 51);
+  border-bottom: 1px solid var(--rule);
 }
 
 .icon-box {
   display: flex;
-  width: 4rem;
+  width: var(--icon-col-width);
   flex-grow: 0;
   flex-shrink: 0;
   align-items: center;
@@ -101,8 +113,8 @@ const { chatOptions } = storeToRefs(chatOptionsStore);
 }
 
 .icon-box .icon {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: var(--chat-icon-size);
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
@@ -115,38 +127,38 @@ const { chatOptions } = storeToRefs(chatOptionsStore);
 .badge-box {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--gap);
   flex-grow: 0;
   flex-shrink: 0;
 }
 
 .badge {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: var(--chat-icon-size);
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .nickname {
   flex-grow: 1;
   font-weight: bold;
-  padding: 0.4rem 1rem 0.4rem 0;
+  padding: var(--cell-pad-v) var(--cell-pad-h) var(--cell-pad-v) 0;
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
 }
 
 .message {
-  padding: 0.4rem 1rem 0.4rem 9rem;
+  padding: var(--cell-pad-v) var(--cell-pad-h) var(--cell-pad-v) 9rem;
 }
 
 .message :deep(.emoji) {
-  height: 1.8rem;
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .message :deep(.sticker) {
-  width: 10rem;
-  height: 10rem;
+  width: var(--chat-sticker-size);
+  height: var(--chat-sticker-size);
   vertical-align: middle;
 }
 
@@ -164,17 +176,17 @@ const { chatOptions } = storeToRefs(chatOptionsStore);
 .header .cell {
   display: flex;
   align-items: center;
-  padding: 0.4rem 1rem;
-  color: rgb(136, 136, 136);
-  border-bottom: 1px solid rgb(51, 51, 51);
+  padding: var(--cell-pad-v) var(--cell-pad-h);
+  color: var(--muted-text);
+  border-bottom: 1px solid var(--rule);
   flex-grow: 1;
 }
 
 .header .cell:first-of-type {
   flex-grow: 0;
   flex-shrink: 0;
-  width: 4rem;
+  width: var(--icon-col-width);
   justify-content: center;
-  border-right: 1px solid rgb(51, 51, 51);
+  border-right: 1px solid var(--rule);
 }
 </style>

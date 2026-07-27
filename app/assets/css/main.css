@@ -14,3 +14,29 @@
 html {
   -webkit-font-smoothing: antialiased;
 }
+
+:root {
+  /* Shared Pretendard-led sans stack (DESIGN.md {typography.builder-body} /
+     {typography.overlay-body}). body.index (pages/index.vue) and body.chat
+     (pages/chat.vue) each assign this to chota's own --font-family-sans. */
+  --chat-font-sans:
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo",
+    "Noto Sans KR", "Malgun Gothic", "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol", sans-serif;
+  /* "ONE-Mobile-POP" is the playful themes' (colorful/cute-*) shared display
+     voice (DESIGN.md {typography.overlay-display}) — a deliberate shared
+     *role* across those themes, not a coincidental shared number the way
+     --chat-gap used to be, so this one stays global. The @font-face that
+     loads the webfont is global anyway. */
+  --font-family-display: "ONE-Mobile-POP", var(--chat-font-sans);
+
+  /* Cross-theme *contract*, not a coincidence: every theme's platform icon,
+     badge, inline emoji and sticker must render at exactly these sizes so
+     OBS layouts stay predictable across themes. A theme must not redeclare
+     or override these locally — unlike the spacing/color tokens below,
+     which are each theme's own decision and now live scoped inside that
+     theme's own `.chat-container` (see components/themes/*). */
+  --chat-icon-size: 1.8rem; /* platform icon, badge, inline emoji */
+  --chat-sticker-size: 10rem;
+}

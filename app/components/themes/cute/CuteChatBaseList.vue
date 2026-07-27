@@ -72,27 +72,21 @@ const idToColor = function (index: number) {
 
 <style scoped>
 .chat-container {
+  /* Cute's own tokens — scoped here on purpose (see DESIGN.md's
+     per-theme-design-system principle): no other theme can reach these.
+     .item's own margin/padding also land on 0.8rem, but that's the outer
+     item margin vs. its own inner padding — separate decisions, left as
+     plain literals. Likewise, the two rgba(255, 255, 255, 1) occurrences
+     below (::after's paper backdrop vs. nickname-box's contrast text
+     color) serve different roles and are left untokenized on purpose. */
+  --gap: 0.6rem; /* nickname-box / badge-box internal gap */
+  --pad: 0.8rem; /* nickname-box and message padding */
+
   position: relative;
   height: 100vh;
   width: 100vw;
   overflow-wrap: break-word;
-  font-family:
-    "ONE-Mobile-POP",
-    "Pretendard Variable",
-    Pretendard,
-    -apple-system,
-    BlinkMacSystemFont,
-    system-ui,
-    Roboto,
-    "Helvetica Neue",
-    "Segoe UI",
-    "Apple SD Gothic Neo",
-    "Noto Sans KR",
-    "Malgun Gothic",
-    "Apple Color Emoji",
-    "Segoe UI Emoji",
-    "Segoe UI Symbol",
-    sans-serif;
+  font-family: var(--font-family-display);
 }
 
 .list {
@@ -146,28 +140,28 @@ const idToColor = function (index: number) {
   z-index: 3;
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.8rem;
+  gap: var(--gap);
+  padding: var(--pad);
   color: rgba(255, 255, 255, 1);
   background-color: var(--nickname-color);
   clip-path: url(#nickname-rect);
 }
 
 .icon {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: var(--chat-icon-size);
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .badge-box {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: var(--gap);
 }
 
 .badge {
-  width: 1.8rem;
-  height: 1.8rem;
+  width: var(--chat-icon-size);
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
@@ -177,17 +171,17 @@ const idToColor = function (index: number) {
 .message {
   position: relative;
   z-index: 3;
-  padding: 0.8rem;
+  padding: var(--pad);
 }
 
 .message :deep(.emoji) {
-  height: 1.8rem;
+  height: var(--chat-icon-size);
   vertical-align: middle;
 }
 
 .message :deep(.sticker) {
-  width: 10rem;
-  height: 10rem;
+  width: var(--chat-sticker-size);
+  height: var(--chat-sticker-size);
   vertical-align: middle;
 }
 </style>
