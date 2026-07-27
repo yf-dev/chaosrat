@@ -29,7 +29,7 @@
         <TextWithShadow
           class="message"
           :shadow-size="0.1"
-          v-html="messageHtml(chat)"
+          :html="messageHtml(chat)"
         />
       </div>
     </div>

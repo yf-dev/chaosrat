@@ -1,5 +1,7 @@
 <template>
-  <div class="text-with-shadow">
+  <!-- eslint-disable-next-line vue/no-v-html -- the `html` prop's contract (see below) requires callers to pass already-sanitized HTML; this component performs no sanitization itself -->
+  <div v-if="html !== undefined" class="text-with-shadow" v-html="html" />
+  <div v-else class="text-with-shadow">
     <slot />
   </div>
 </template>
@@ -7,11 +9,22 @@
 <script setup lang="ts">
 const props = withDefaults(
   defineProps<{
+    /**
+     * Pre-sanitized HTML to render in place of the default slot.
+     *
+     * The caller is responsible for sanitizing this string before passing it
+     * in (e.g. via `messageHtml()` in lib/utils.ts, which runs it through
+     * `sanitize-html`) — this component sets it via `v-html` verbatim and
+     * does no sanitization of its own. Leave this unset to render `<slot />`
+     * instead.
+     */
+    html?: string;
     shadowColor?: string;
     shadowSize?: number;
     unit?: string;
   }>(),
   {
+    html: undefined,
     shadowColor: "black",
     shadowSize: 0.1,
     unit: "rem",

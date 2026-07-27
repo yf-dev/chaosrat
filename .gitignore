@@ -1,6 +1,9 @@
 .vscode
 docker-compose.*.yml
 
+# npx/tooling run from the repo root creates an empty node_modules here
+node_modules
+
 # devcontainer
 .devcontainer
 

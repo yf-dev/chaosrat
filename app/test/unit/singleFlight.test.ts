@@ -1,4 +1,4 @@
-import { createSingleFlight } from "../server/utils/singleFlight";
+import { createSingleFlight } from "../../server/utils/singleFlight";
 
 describe("createSingleFlight", () => {
   it("invokes fn exactly once for concurrent calls sharing a key, and all callers get the same value", async () => {

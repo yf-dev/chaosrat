@@ -1,4 +1,5 @@
 # Nuxt dev/build outputs
+.nuxtrc
 .output
 .data
 .nuxt

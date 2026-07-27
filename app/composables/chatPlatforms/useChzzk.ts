@@ -87,7 +87,9 @@ export function useChzzk(options: {
   // onBecomeLeader/onLoseLeader callbacks need to call `connection.start()` /
   // `connection.stop()`. Declare `connection` first and have its `onEvent`
   // call `sendData` through a closure over the `let` below, which is assigned
-  // once useSharedConnection has run.
+  // once useSharedConnection has run. No initializer is possible at the
+  // declaration site, so `const` can't apply here.
+  // eslint-disable-next-line prefer-const -- no initializer available at the declaration site; assigned exactly once via destructuring below
   let sendData: (data: ChzzkSessionMessageData) => void;
 
   const connection = createChzzkConnection({

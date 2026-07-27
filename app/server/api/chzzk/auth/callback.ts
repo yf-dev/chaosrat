@@ -1,5 +1,11 @@
 import type { ApiError } from "~/lib/interfaces";
 
+// This handler `return`s a redirect via h3's `sendRedirect()` (typed
+// `Promise<void>`) alongside `ApiError` objects on other paths. h3 itself
+// uses this exact idiom (e.g. `serveStatic`'s `Promise<void | false>`) to
+// mean "the response was already sent, there's nothing more to return" —
+// it's a legitimate Nitro/h3 pattern, not a mistake.
+// eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- see above
 export default defineEventHandler(async (event): Promise<void | ApiError> => {
   try {
     const query = getQuery(event);

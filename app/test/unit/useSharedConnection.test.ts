@@ -1,5 +1,5 @@
 import { effectScope, nextTick, ref } from "vue";
-import { useSharedConnection } from "../composables/useSharedConnection";
+import { useSharedConnection } from "../../composables/useSharedConnection";
 
 // These tests drive the real `broadcast-channel` leader election with
 // `type: "simulate"` so multiple "tabs" can talk in-process, and with small
