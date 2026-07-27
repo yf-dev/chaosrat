@@ -155,6 +155,19 @@ message text's one-off `1.2rem` top padding, both of which are margin/
 one-off values with nowhere to attach in the schema and are recorded here
 in prose instead of invented as tokens.
 
+`.chat-container` also sets `word-break: keep-all` alongside its
+`overflow-wrap: anywhere`, inherited into both the label and the message
+card. Korean is the overlay's primary language and a 어절 (word) is the
+unit a reader actually parses, so `keep-all` keeps one intact whenever the
+card has room; `overflow-wrap: anywhere` still breaks a single run too
+long to fit by itself (an unbroken Hangul run, an unbroken ASCII/URL
+token) rather than letting it overflow the card, and by extension the OBS
+source. It has to be `anywhere`, not `break-word`: the message card is a
+shrink-to-fit box, and `break-word` does not reduce a box's min-content
+size, so an unbreakable run (no internal spaces, so `keep-all` leaves it
+whole) would inflate the card's min-content width and overflow instead of
+wrapping; `anywhere` shrinks min-content too.
+
 ## Elevation & Depth
 
 There is no shadow system in this theme — no `box-shadow` appears anywhere
@@ -215,3 +228,4 @@ the same reason.
 - Don't override `--chat-icon-size` or `--chat-sticker-size` locally; both
   are the cross-theme contract from `app/assets/css/main.css` and every
   theme, including this one, consumes them unmodified.
+- Do keep `word-break: keep-all` paired with `overflow-wrap: anywhere` on `.chat-container`. Don't drop `keep-all` — that reopens mid-어절 breaks in Korean text; don't drop `overflow-wrap: anywhere` either — that lets an unbroken run overflow the card instead of wrapping; and don't swap it back to `break-word` — it doesn't shrink the card's min-content size, so an unbreakable run overflows instead of wrapping.

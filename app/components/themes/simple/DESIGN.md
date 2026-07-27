@@ -154,6 +154,20 @@ are two independent layout calls that happen to land on the same numbers.
 Do not "simplify" these into one shared variable — that would weld together
 two decisions that are free to diverge later.
 
+`.chat-container` also sets `word-break: keep-all` alongside its
+`overflow-wrap: anywhere`, inherited into the single inline run of icon,
+badges, nickname, and message that makes up a chat line here. Korean is
+the overlay's primary language and a 어절 (word) is the unit a reader
+actually parses, so `keep-all` keeps one intact whenever there's room on
+the line; `overflow-wrap: anywhere` still breaks a single run too long
+to fit by itself (an unbroken Hangul run, an unbroken ASCII/URL token)
+rather than letting it overflow the OBS source. It has to be `anywhere`,
+not `break-word`: the chat line is an `inline-block`, a shrink-to-fit
+sizing context, and `break-word` does not reduce a box's min-content
+size, so an unbreakable run (no internal spaces, so `keep-all` leaves it
+whole) would inflate the line's min-content width and overflow instead of
+wrapping; `anywhere` shrinks min-content too.
+
 `{spacing.icon}` (`1.8rem`) and `{spacing.sticker}` (`10rem`) are
 not this theme's own spacing scale either — they are mirrors of
 `--chat-icon-size` / `--chat-sticker-size`, declared once in
@@ -214,3 +228,4 @@ an `<img>`, never a container shape around it.
   `--gap`/`--nudge` just because the numbers match — see Layout.
 - Don't give the emoji component a fixed `width` — its unset width (aspect
   ratio preserved) is intentional, unlike the square `icon`/`badge`.
+- Do keep `word-break: keep-all` paired with `overflow-wrap: anywhere` on `.chat-container`. Don't drop `keep-all` — that reopens mid-어절 breaks in Korean text; don't drop `overflow-wrap: anywhere` either — that lets an unbroken run overflow the OBS source instead of wrapping; and don't swap it back to `break-word` — it doesn't shrink the inline-block's min-content size, so an unbreakable run overflows instead of wrapping.

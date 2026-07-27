@@ -145,6 +145,19 @@ and `.list` is pinned to its bottom-left corner via
 `position: absolute; left: 0; right: 0; bottom: 0` — the same bottom-anchored
 stacking behavior every theme in this project shares.
 
+`.chat-container` also sets `word-break: keep-all` alongside its
+`overflow-wrap: anywhere`, inherited into `.message` (the only text
+element this theme has). Korean is the overlay's primary language and a
+어절 (word) is the unit a reader actually parses, so `keep-all` keeps one
+intact whenever the line has room; `overflow-wrap: anywhere` still
+breaks a single run too long to fit on its own (an unbroken Hangul run, an
+unbroken ASCII/URL token) rather than letting it overflow the OBS source.
+It has to be `anywhere`, not `break-word`: in a shrink-to-fit sizing
+context `break-word` does not reduce a box's min-content size, so an
+unbreakable run (no internal spaces, so `keep-all` leaves it whole) would
+inflate min-content and overflow instead of wrapping; `anywhere` shrinks
+min-content too.
+
 This theme renders **no platform icon and no badges at all** — unlike
 `default`, `simple`, `colorful`, and the `cute-*` themes, which all gate a
 platform icon behind `v-if="!chatOptions.isHidePlatformIcon"`,
@@ -217,3 +230,4 @@ regardless of what hue landed inside it. The message itself sets no
 - Do keep `--dot-size` scoped to this theme's own `.chat-container`. Don't
   promote it to a shared, project-wide custom property — no other theme has an
   identity dot, so there is nothing to share it with.
+- Do keep `word-break: keep-all` paired with `overflow-wrap: anywhere` on `.chat-container`. Don't drop `keep-all` — that reopens mid-어절 breaks in Korean text; don't drop `overflow-wrap: anywhere` either — that lets an unbroken run overflow the OBS source instead of wrapping; and don't swap it back to `break-word` — it doesn't shrink a shrink-to-fit box's min-content size, so an unbreakable run overflows instead of wrapping.

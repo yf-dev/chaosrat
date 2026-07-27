@@ -298,6 +298,22 @@ of whatever OBS Browser Source region it is given, per the Colors section's
 note that this theme needs a dedicated region rather than a full-bleed
 overlay.
 
+`.chat-container` also sets `word-break: keep-all` alongside its
+`overflow-wrap: anywhere`, inherited into `.message-cell` — the one
+element in this table that actually wraps across lines (`.nickname-cell`
+truncates with `white-space: nowrap; text-overflow: ellipsis; overflow:
+hidden`, so neither property affects it). Korean is the overlay's primary
+language and a 어절 (word) is the unit a reader actually parses, so
+`keep-all` keeps one intact whenever the message cell has room;
+`overflow-wrap: anywhere` still breaks a single run too long to fit
+inside `{spacing.message-indent}`'s column (an unbroken Hangul run, an
+unbroken ASCII/URL token) rather than letting it overflow the table. It
+has to be `anywhere`, not `break-word`: `break-word` does not reduce a
+box's min-content size in a shrink-to-fit sizing context, so an
+unbreakable run (no internal spaces, so `keep-all` leaves it whole) would
+inflate `.message-cell`'s min-content width and overflow the table instead
+of wrapping; `anywhere` shrinks min-content too.
+
 ## Elevation & Depth
 
 Flat, with zero shadows anywhere in the stylesheet. Hierarchy comes from
@@ -398,3 +414,4 @@ slot stays filled is structural, not decorative.
   would nudge this theme toward the floating-card look every other theme
   already owns, and away from the opaque-application-chrome look
   that is this theme's one reason to exist.
+- Do keep `word-break: keep-all` paired with `overflow-wrap: anywhere` on `.chat-container`. Don't drop `keep-all` — that reopens mid-어절 breaks in Korean text in `.message-cell`; don't drop `overflow-wrap: anywhere` either — that lets an unbroken run overflow the table instead of wrapping; and don't swap it back to `break-word` — it doesn't shrink `.message-cell`'s min-content size, so an unbreakable run overflows instead of wrapping.

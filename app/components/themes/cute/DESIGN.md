@@ -158,6 +158,21 @@ padding — so they stay two plain literals rather than one shared token.
 the only structural difference between the two components, both of which
 render nothing but `<CuteChatBaseList align="...">`.
 
+`.chat-container` also sets `word-break: keep-all` alongside its
+`overflow-wrap: anywhere`, inherited into both `.nickname` and
+`.message`. Korean is the overlay's primary language and a 어절 (word) is
+the unit a reader actually parses, so `keep-all` keeps one intact whenever
+the bubble has room to grow (`.item`'s `width: fit-content` means the
+bubble itself grows with the text, not the other way around);
+`overflow-wrap: anywhere` still breaks a single run too long to fit on
+its own (an unbroken Hangul run, an unbroken ASCII/URL token) rather than
+letting the bubble overflow the OBS source. `.item`'s `fit-content` sizing
+is exactly a shrink-to-fit context, and `overflow-wrap: break-word` does
+not reduce a box's _min-content_ size — only `anywhere` does — so a long
+nickname with no internal spaces (one unbreakable run under `keep-all`)
+would inflate the bubble's min-content width and overflow instead of
+wrapping if this used `break-word`.
+
 ## Elevation & Depth
 
 There is no shadow or blur anywhere in this theme. Depth is faked entirely by
@@ -228,7 +243,8 @@ documented here rather than invented as fake tokens.
   `ONE-Mobile-POP` here — `colorful` deliberately speaks in the same display
   voice, and forking would desync the two silently.
 - Don't replace the `#item-rect`/`#nickname-rect` clip-paths with
-`border-radius` to "simplify" the markup. The wobble is the entire hand-cut
-read this theme is built on; a rounded rectangle is a different, blander
-design.
+  `border-radius` to "simplify" the markup. The wobble is the entire hand-cut
+  read this theme is built on; a rounded rectangle is a different, blander
+  design.
+- Do keep `word-break: keep-all` paired with `overflow-wrap: anywhere` on `.chat-container`. Don't drop `keep-all` — that reopens mid-어절 breaks in Korean text; don't drop `overflow-wrap: anywhere` either — that lets an unbroken run overflow the bubble instead of wrapping; and don't swap it back to `break-word` — `break-word` doesn't shrink `.item`'s fit-content min-content size, so a spaceless nickname overflows instead of wrapping.
 </content>

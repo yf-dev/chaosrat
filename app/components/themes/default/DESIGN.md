@@ -126,6 +126,23 @@ corner, so new items push older ones upward — the standard chat-overlay
 stacking behavior shared by every theme, not something specific to
 `default`.
 
+`.chat-container` also sets `word-break: keep-all` alongside its
+`overflow-wrap: anywhere`, and both are inherited down into `.nickname`
+and `.message`. Korean is this overlay's primary language, and a 어절
+(word) is the unit a reader actually parses — breaking mid-어절 (`메시지`/`가`)
+is what a broken line looks like in Korean, not just an aesthetic wobble.
+`keep-all` keeps a 어절 intact whenever there's room; `overflow-wrap:
+anywhere` is still what breaks a single run too long for the container to
+hold (a long unbroken Hangul run, an unbroken ASCII/URL token), so nothing
+is ever allowed to overflow the OBS source just to preserve a word. It has
+to be `anywhere` rather than the more familiar `break-word`: `.nickname-box`
+is a flex item, a shrink-to-fit sizing context, and `break-word` does not
+reduce a box's _min-content_ size — only `anywhere` does. With
+`break-word`, a nickname with no internal spaces (so `keep-all` treats it
+as one unbreakable run) inflates `.nickname-box`'s min-content width and
+the box overflows the OBS source instead of wrapping; `anywhere` shrinks
+min-content too, so the box wraps the run instead.
+
 ## Elevation & Depth
 
 This theme has no shadows, blur, or borders standing in for depth. Its one
@@ -180,7 +197,8 @@ not supposed to make.
   against unpredictable live video showing through the translucent plate —
   removing it is a legibility regression, not a cleanup.
 - Don't assert a fixed contrast ratio for `{colors.text}` on
-`{colors.primary}` in review comments or future edits. The plate composites
-against whatever OBS is showing underneath, which is unknown at design
-time; the outline, not a contrast number, is this theme's real answer.
+  `{colors.primary}` in review comments or future edits. The plate composites
+  against whatever OBS is showing underneath, which is unknown at design
+  time; the outline, not a contrast number, is this theme's real answer.
+- Do keep `word-break: keep-all` paired with `overflow-wrap: anywhere` on `.chat-container`. Don't drop `keep-all` to "simplify" — that reopens mid-어절 breaks in Korean text; don't drop `overflow-wrap: anywhere` either — that lets an unbroken run overflow the OBS source instead of wrapping; and don't swap it back to `break-word` — `break-word` doesn't shrink `.nickname-box`'s min-content size, so a spaceless nickname overflows instead of wrapping.
 </content>

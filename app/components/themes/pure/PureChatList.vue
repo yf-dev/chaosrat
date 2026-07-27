@@ -39,7 +39,13 @@ defineProps<{
   position: relative;
   height: 100vh;
   width: 100vw;
-  overflow-wrap: break-word;
+  /* Keep 어절 (word) units intact; only break inside one when it can't fit.
+     `anywhere`, not `break-word`: `break-word` doesn't reduce a shrink-to-fit
+     box's min-content size, so a long unbreakable run would overflow the OBS
+     source instead of wrapping. `anywhere` does shrink min-content, so the
+     box wraps instead. */
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 
 .list {

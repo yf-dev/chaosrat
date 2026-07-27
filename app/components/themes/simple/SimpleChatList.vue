@@ -62,7 +62,13 @@ const { chatOptions } = storeToRefs(chatOptionsStore);
   position: relative;
   height: 100vh;
   width: 100vw;
-  overflow-wrap: break-word;
+  /* Keep 어절 (word) units intact; only break inside one when it can't fit.
+     `anywhere`, not `break-word`: `break-word` doesn't reduce a shrink-to-fit
+     box's min-content size, so the inline-block chat line would overflow the
+     OBS source instead of wrapping an unbreakable run. `anywhere` does
+     shrink min-content, so the line wraps instead. */
+  overflow-wrap: anywhere;
+  word-break: keep-all;
 }
 
 .list {
