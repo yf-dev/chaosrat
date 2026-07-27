@@ -15,6 +15,7 @@
     "test:coverage": "vitest run --coverage",
     "coverage:summary": "vitest run --coverage --coverage.reportOnFailure --coverage.reporter=text --coverage.reporter=html --coverage.reporter=json-summary && node -e \"const c = require('./coverage/coverage-summary.json').total; const f = (n) => n.toFixed(2); console.log('Coverage: ' + f(c.statements.pct) + '% stmts | ' + f(c.branches.pct) + '% branch | ' + f(c.functions.pct) + '% funcs | ' + f(c.lines.pct) + '% lines');\"",
     "design:check": "node scripts/check-design.mjs",
+    "typecheck": "nuxt typecheck",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
@@ -55,7 +56,9 @@
     "lint-staged": "17.2.0",
     "nuxt-gtag": "^2.0.5",
     "prettier": "3.9.6",
-    "vitest": "^4.1.10"
+    "typescript": "^5.7.3",
+    "vitest": "^4.1.10",
+    "vue-tsc": "^3.3.8"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,vue}": [

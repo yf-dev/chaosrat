@@ -19,6 +19,7 @@ describe("server/api/twitch/badges", () => {
 
     expect(result).toEqual({
       status: "ERROR",
+      code: "invalid_channel_id",
       error: "channelId param should be a string",
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -136,6 +137,7 @@ describe("server/api/twitch/badges", () => {
 
     expect(result).toEqual({
       status: "ERROR",
+      code: "internal_server_error",
       error: "Internal Server Error",
     });
   });

@@ -1,6 +1,6 @@
 import { mountSuspended, mockNuxtImport } from "@nuxt/test-utils/runtime";
 import { flushPromises } from "@vue/test-utils";
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import ChatOverlay from "~/components/ChatOverlay.vue";
 import DefaultChatList from "~/components/themes/default/DefaultChatList.vue";
 import ColorfulChatList from "~/components/themes/colorful/ColorfulChatList.vue";
@@ -62,7 +62,7 @@ function setUpChatItems(
   capturedChatItemsOptions = undefined;
   vi.mocked(useChatItems).mockImplementation((options) => {
     capturedChatItemsOptions = options;
-    return { chatItems: ref(items), errors: ref(errors) };
+    return { chatItems: computed(() => items), errors: computed(() => errors) };
   });
 }
 
@@ -202,7 +202,9 @@ describe("sticker/emoji encoding", () => {
   it("renders emoji and sticker markers found in the message as real <img> elements", async () => {
     setChatOptions({ theme: "default" });
     vi.mocked(useOpenDcconSelector).mockReturnValue({
-      stickerItems: ref([{ id: "cat", url: "https://example.com/cat.png" }]),
+      stickerItems: computed(() => [
+        { id: "cat", url: "https://example.com/cat.png" },
+      ]),
     });
     setUpChatItems([
       makeChatItem({
@@ -388,7 +390,7 @@ describe("sound effects", () => {
     vi.stubGlobal(
       "Audio",
       class extends FakeAudio {
-        play = vi.fn().mockRejectedValue(new Error("NotAllowedError"));
+        override play = vi.fn().mockRejectedValue(new Error("NotAllowedError"));
         constructor(src?: string) {
           super(src);
           audioInstances.push(this);

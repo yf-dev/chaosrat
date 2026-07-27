@@ -31,7 +31,14 @@ describe("useYoutubeLive.ts XHR proxy patch (updateUrl / replaceXhrOpen)", () =>
 
       const xhr = new XMLHttpRequest();
 
-      patchedOpen.call(xhr, "GET", "https://www.youtube.com/foo/bar?x=1");
+      // The patched `open`'s declared type is the DOM's overloaded
+      // XMLHttpRequest#open signature, and `.call()` on an overloaded
+      // function type resolves against its last (5-param) overload only --
+      // so `async` must be passed explicitly here even though the patched
+      // function's own runtime default (`async = true`) would otherwise
+      // cover this. This mirrors, rather than changes, what `open()` does at
+      // runtime when a caller (like `youtube-chat`) omits `async`.
+      patchedOpen.call(xhr, "GET", "https://www.youtube.com/foo/bar?x=1", true);
       // `url.pathname` already starts with "/", so `updateUrl()` must not
       // insert another "/" after "proxy" (that would double it up). Verified
       // server-side (server/api/youtubeLive/proxy/[...path].ts) that a

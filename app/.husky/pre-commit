@@ -25,6 +25,13 @@ cd "$(dirname "$0")/.."
 echo "==> [pre-commit] running lint-staged..."
 npx lint-staged
 
+# vue-tsc is a whole-project check — it has no staged-only mode, and a type
+# error is by nature cross-file (a change to one file breaks another), so
+# scoping it to the staged set would defeat the point. Same working-tree
+# caveat as the test suite below.
+echo "==> [pre-commit] running typecheck..."
+npm run typecheck
+
 # NOTE: this runs the test suite against the current working tree, not the
 # strict staged-only snapshot lint-staged normally provides. That's a
 # deliberate, accepted tradeoff (running vitest against a synthetic

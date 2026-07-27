@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from "pinia";
 import { mockNuxtImport } from "@nuxt/test-utils/runtime";
-import { nextTick, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import type { LocationQuery, RouteLocationNormalizedLoaded } from "vue-router";
 import type { ChatItem } from "~/lib/interfaces";
 
@@ -71,20 +71,20 @@ function setUpPlatforms(items: {
   kick?: ChatItem[];
 }) {
   vi.mocked(useChzzk).mockReturnValue({
-    chatItems: ref(items.chzzk ?? []),
+    chatItems: computed(() => items.chzzk ?? []),
     clearChat: vi.fn(),
     errors: ref([]),
   });
   vi.mocked(useTwitch).mockReturnValue({
-    chatItems: ref(items.twitch ?? []),
+    chatItems: computed(() => items.twitch ?? []),
     clearChat: vi.fn(),
   });
   vi.mocked(useYoutubeLive).mockReturnValue({
-    chatItems: ref(items.youtubeLive ?? []),
+    chatItems: computed(() => items.youtubeLive ?? []),
     clearChat: vi.fn(),
   });
   vi.mocked(useKick).mockReturnValue({
-    chatItems: ref(items.kick ?? []),
+    chatItems: computed(() => items.kick ?? []),
     clearChat: vi.fn(),
     errors: ref([]),
   });
@@ -249,22 +249,26 @@ describe("useChatItems", () => {
 
   it("does not call onNewChatItem when the newest item's timestamp does not exceed the last-seen one (e.g. an older item arrives from another platform afterwards)", async () => {
     setUpMaxChatSize(undefined);
+    // Kept as a plain ref (the source of truth the test mutates below) and
+    // wrapped in a computed for the mock, so the mock's declared type
+    // (ComputedRef<ChatItem[]>, matching useChzzk's real return type) still
+    // reacts to `chzzkItems.value` being reassigned.
     const chzzkItems = ref<ChatItem[]>([makeChatItem("chzzk", "first", 100)]);
     vi.mocked(useChzzk).mockReturnValue({
-      chatItems: chzzkItems,
+      chatItems: computed(() => chzzkItems.value),
       clearChat: vi.fn(),
       errors: ref([]),
     });
     vi.mocked(useTwitch).mockReturnValue({
-      chatItems: ref([]),
+      chatItems: computed(() => []),
       clearChat: vi.fn(),
     });
     vi.mocked(useYoutubeLive).mockReturnValue({
-      chatItems: ref([]),
+      chatItems: computed(() => []),
       clearChat: vi.fn(),
     });
     vi.mocked(useKick).mockReturnValue({
-      chatItems: ref([]),
+      chatItems: computed(() => []),
       clearChat: vi.fn(),
       errors: ref([]),
     });
@@ -293,20 +297,20 @@ describe("useChatItems", () => {
       const youtubeLiveClearChat = vi.fn();
       const kickClearChat = vi.fn();
       vi.mocked(useChzzk).mockReturnValue({
-        chatItems: ref([]),
+        chatItems: computed(() => []),
         clearChat: chzzkClearChat,
         errors: ref([]),
       });
       vi.mocked(useTwitch).mockReturnValue({
-        chatItems: ref([]),
+        chatItems: computed(() => []),
         clearChat: twitchClearChat,
       });
       vi.mocked(useYoutubeLive).mockReturnValue({
-        chatItems: ref([]),
+        chatItems: computed(() => []),
         clearChat: youtubeLiveClearChat,
       });
       vi.mocked(useKick).mockReturnValue({
-        chatItems: ref([]),
+        chatItems: computed(() => []),
         clearChat: kickClearChat,
         errors: ref([]),
       });
@@ -337,7 +341,7 @@ describe("useChatItems", () => {
       setUpMaxChatSize(undefined);
       const chzzkClearChat = vi.fn();
       vi.mocked(useChzzk).mockReturnValue({
-        chatItems: ref([]),
+        chatItems: computed(() => []),
         clearChat: chzzkClearChat,
         errors: ref([]),
       });
@@ -362,7 +366,7 @@ describe("useChatItems", () => {
     setUpMaxChatSize(undefined);
     setUpPlatforms({});
     vi.mocked(useChzzk).mockReturnValue({
-      chatItems: ref([]),
+      chatItems: computed(() => []),
       clearChat: vi.fn(),
       errors: ref([
         { id: "err1", platform: "chzzk", message: "channel ID mismatch" },
@@ -380,7 +384,7 @@ describe("useChatItems", () => {
     setUpMaxChatSize(undefined);
     setUpPlatforms({});
     vi.mocked(useKick).mockReturnValue({
-      chatItems: ref([]),
+      chatItems: computed(() => []),
       clearChat: vi.fn(),
       errors: ref([
         { id: "kick-pusher-error", platform: "kick", message: "pusher error" },
@@ -398,14 +402,14 @@ describe("useChatItems", () => {
     setUpMaxChatSize(undefined);
     setUpPlatforms({});
     vi.mocked(useChzzk).mockReturnValue({
-      chatItems: ref([]),
+      chatItems: computed(() => []),
       clearChat: vi.fn(),
       errors: ref([
         { id: "err1", platform: "chzzk", message: "channel ID mismatch" },
       ]),
     });
     vi.mocked(useKick).mockReturnValue({
-      chatItems: ref([]),
+      chatItems: computed(() => []),
       clearChat: vi.fn(),
       errors: ref([
         { id: "kick-pusher-error", platform: "kick", message: "pusher error" },

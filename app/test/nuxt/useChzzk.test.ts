@@ -99,6 +99,28 @@ function sharedOptions(): SharedConnectionOptions<unknown> {
   return capturedSharedOptions.current as SharedConnectionOptions<unknown>;
 }
 
+// `fetchLiveSignal`/`fetchSubscriptionHealth` are declared optional on
+// ChzzkConnectionDeps (lib/chzzkConnection.ts uses `deps.fetchLiveSignal?.()`
+// internally). The mock in this file always provides both, so these wrappers
+// assert that -- surfacing a real "the dep was never wired up" failure -- and
+// then call it, rather than papering over the possibly-undefined type with a
+// bare `!` at every call site below.
+function fetchLiveSignal(): ReturnType<
+  NonNullable<ChzzkConnectionDeps["fetchLiveSignal"]>
+> {
+  const fn = deps().fetchLiveSignal;
+  expect(fn).toBeDefined();
+  return fn!();
+}
+
+function fetchSubscriptionHealth(
+  sessionKey: string,
+): ReturnType<NonNullable<ChzzkConnectionDeps["fetchSubscriptionHealth"]>> {
+  const fn = deps().fetchSubscriptionHealth;
+  expect(fn).toBeDefined();
+  return fn!(sessionKey);
+}
+
 function emitData(
   data: Parameters<SharedConnectionOptions<unknown>["onData"]>[0],
 ) {
@@ -528,7 +550,7 @@ describe("useChzzk", () => {
       setUp();
       useChzzk({});
 
-      const result = await deps().fetchLiveSignal();
+      const result = await fetchLiveSignal();
 
       expect(result).toEqual({ status: "UNKNOWN" });
       expect(fetchMock).not.toHaveBeenCalled();
@@ -544,7 +566,7 @@ describe("useChzzk", () => {
       });
       useChzzk({});
 
-      await deps().fetchLiveSignal();
+      await fetchLiveSignal();
 
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/chzzk/chatChannelId",
@@ -565,7 +587,7 @@ describe("useChzzk", () => {
         .mockImplementation(() => {});
       useChzzk({});
 
-      const result = await deps().fetchLiveSignal();
+      const result = await fetchLiveSignal();
 
       expect(result).toEqual({ status: "OPEN", chatChannelId: "chat-1" });
       expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -589,7 +611,7 @@ describe("useChzzk", () => {
         .mockImplementation(() => {});
       useChzzk({});
 
-      const result = await deps().fetchLiveSignal();
+      const result = await fetchLiveSignal();
 
       expect(result).toEqual({ status: "CLOSED" });
       expect(consoleLogSpy).not.toHaveBeenCalled();
@@ -610,7 +632,7 @@ describe("useChzzk", () => {
         .mockImplementation(() => {});
       useChzzk({});
 
-      const result = await deps().fetchLiveSignal();
+      const result = await fetchLiveSignal();
 
       expect(result).toEqual({ status: "OPEN", chatChannelId: null });
       expect(consoleLogSpy).not.toHaveBeenCalled();
@@ -627,7 +649,7 @@ describe("useChzzk", () => {
       });
       useChzzk({});
 
-      const result = await deps().fetchLiveSignal();
+      const result = await fetchLiveSignal();
 
       expect(result).toEqual({ status: "UNKNOWN" });
     });
@@ -643,7 +665,7 @@ describe("useChzzk", () => {
         .mockImplementation(() => {});
       useChzzk({});
 
-      await expect(deps().fetchLiveSignal()).resolves.toEqual({
+      await expect(fetchLiveSignal()).resolves.toEqual({
         status: "UNKNOWN",
       });
       expect(consoleLogSpy).toHaveBeenCalledWith("Chzzk fetchLiveSignal Error");
@@ -667,7 +689,7 @@ describe("useChzzk", () => {
         .mockImplementation(() => {});
       useChzzk({});
 
-      const result = await deps().fetchSubscriptionHealth("sess-1");
+      const result = await fetchSubscriptionHealth("sess-1");
 
       expect(result).toBe("UNKNOWN");
       expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -692,7 +714,7 @@ describe("useChzzk", () => {
       });
       useChzzk({});
 
-      const result = await deps().fetchSubscriptionHealth("sess-1");
+      const result = await fetchSubscriptionHealth("sess-1");
 
       expect(result).toBe("SUBSCRIBED");
     });
@@ -711,7 +733,7 @@ describe("useChzzk", () => {
         .mockImplementation(() => {});
       useChzzk({});
 
-      const result = await deps().fetchSubscriptionHealth("sess-1");
+      const result = await fetchSubscriptionHealth("sess-1");
 
       expect(result).toBe("LOST");
       expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -737,7 +759,7 @@ describe("useChzzk", () => {
       });
       useChzzk({});
 
-      const result = await deps().fetchSubscriptionHealth("sess-1");
+      const result = await fetchSubscriptionHealth("sess-1");
 
       expect(result).toBe("LOST");
     });
@@ -750,7 +772,7 @@ describe("useChzzk", () => {
         .mockImplementation(() => {});
       useChzzk({});
 
-      const result = await deps().fetchSubscriptionHealth("sess-1");
+      const result = await fetchSubscriptionHealth("sess-1");
 
       expect(result).toBe("UNKNOWN");
       expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -771,9 +793,7 @@ describe("useChzzk", () => {
         .mockImplementation(() => {});
       useChzzk({});
 
-      await expect(deps().fetchSubscriptionHealth("sess-1")).resolves.toBe(
-        "UNKNOWN",
-      );
+      await expect(fetchSubscriptionHealth("sess-1")).resolves.toBe("UNKNOWN");
       expect(consoleLogSpy).toHaveBeenCalledWith(
         "Chzzk fetchSubscriptionHealth Error (UNKNOWN)",
       );
