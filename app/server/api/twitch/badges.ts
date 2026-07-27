@@ -24,16 +24,26 @@ export default defineEventHandler(
       const badgeData: TwitchBadge = {};
 
       // get app access token
+      //
+      // Credentials go in the POST body, not the URL query string: ofetch's
+      // FetchError.message embeds the full request URL, so a query-string
+      // secret would reach console.error(error) in the catch block below on
+      // any non-2xx from id.twitch.tv (expired credentials, a 429, an
+      // outage) — and this route is unauthenticated, so an outsider can
+      // trigger that by rate-limiting it. Do not "simplify" this back to a
+      // template-literal URL.
       const appAccessToken = await $fetch<{
         access_token: string;
         expires_in: number;
         token_type: string;
-      }>(
-        `https://id.twitch.tv/oauth2/token?client_id=${twitchClientId}&client_secret=${twitchClientSecret}&grant_type=client_credentials`,
-        {
-          method: "POST",
-        },
-      );
+      }>("https://id.twitch.tv/oauth2/token", {
+        method: "POST",
+        body: new URLSearchParams({
+          client_id: twitchClientId,
+          client_secret: twitchClientSecret,
+          grant_type: "client_credentials",
+        }),
+      });
 
       // get global badges
       const globalBadges = await $fetch<{
@@ -63,7 +73,8 @@ export default defineEventHandler(
         data: {
           id: string;
         }[];
-      }>(`https://api.twitch.tv/helix/users?login=${channelId}`, {
+      }>("https://api.twitch.tv/helix/users", {
+        query: { login: channelId },
         headers: {
           "Client-ID": twitchClientId,
           Authorization: `Bearer ${appAccessToken.access_token}`,

@@ -3,12 +3,36 @@ import { installH3Globals, createMockEvent } from "./h3TestHelpers";
 installH3Globals();
 
 describe("server/api/chzzk/session/open", () => {
+  it("rejects a GET request with 405 and does not call upstream (CSRF hardening)", async () => {
+    const fetchMock = vi.fn();
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/session/open")).default;
+    const { event, getStatusCode } = createMockEvent({
+      url: "/api/chzzk/session/open",
+      method: "GET",
+    });
+
+    const result = await handler(event);
+
+    expect(getStatusCode()).toBe(405);
+    expect(result).toEqual({
+      status: "ERROR",
+      code: "method_not_allowed",
+      error: "Method Not Allowed",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("returns not_logged_in without calling upstream when the access-token cookie is absent", async () => {
     const fetchMock = vi.fn();
     globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
 
     const handler = (await import("~/server/api/chzzk/session/open")).default;
-    const { event } = createMockEvent({ url: "/api/chzzk/session/open" });
+    const { event } = createMockEvent({
+      url: "/api/chzzk/session/open",
+      method: "POST",
+    });
 
     const result = await handler(event);
 
@@ -30,6 +54,7 @@ describe("server/api/chzzk/session/open", () => {
     const handler = (await import("~/server/api/chzzk/session/open")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/session/open",
+      method: "POST",
       headers: { cookie: "chzzk_access_token=at-1" },
     });
 
@@ -51,6 +76,7 @@ describe("server/api/chzzk/session/open", () => {
     const handler = (await import("~/server/api/chzzk/session/open")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/session/open",
+      method: "POST",
       headers: { cookie: "chzzk_access_token=stale-token" },
     });
 
@@ -72,6 +98,7 @@ describe("server/api/chzzk/session/open", () => {
     const handler = (await import("~/server/api/chzzk/session/open")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/session/open",
+      method: "POST",
       headers: { cookie: "chzzk_access_token=stale-token" },
     });
 
@@ -93,6 +120,7 @@ describe("server/api/chzzk/session/open", () => {
     const handler = (await import("~/server/api/chzzk/session/open")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/session/open",
+      method: "POST",
       headers: { cookie: "chzzk_access_token=stale-token" },
     });
 
@@ -114,6 +142,7 @@ describe("server/api/chzzk/session/open", () => {
     const handler = (await import("~/server/api/chzzk/session/open")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/session/open",
+      method: "POST",
       headers: { cookie: "chzzk_access_token=stale-token" },
     });
 
@@ -134,6 +163,7 @@ describe("server/api/chzzk/session/open", () => {
     const handler = (await import("~/server/api/chzzk/session/open")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/session/open",
+      method: "POST",
       headers: { cookie: "chzzk_access_token=at-1" },
     });
 
@@ -156,6 +186,7 @@ describe("server/api/chzzk/session/open", () => {
     const handler = (await import("~/server/api/chzzk/session/open")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/session/open",
+      method: "POST",
       headers: { cookie: "chzzk_access_token=at-1" },
     });
 

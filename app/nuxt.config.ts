@@ -28,7 +28,7 @@ export default defineNuxtConfig({
 
   vite: {
     server: {
-      allowedHosts: ["localhost ", ".update.sh"],
+      allowedHosts: ["localhost", ".update.sh"],
     },
     define: {
       global: "window", // Prevent `H3Error: global is not defined` error caused by old `socket.io-client`

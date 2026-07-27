@@ -19,7 +19,10 @@ export default defineEventHandler(
           chatChannelId?: string | null;
         };
       }>(
-        `https://api.chzzk.naver.com/polling/v2/channels/${channelId}/live-status`,
+        // channelId is an untrusted query parameter interpolated into a URL
+        // path; without encoding, dot segments (e.g. `../../../open/v1/lives`)
+        // would be resolved by the URL parser and reach a different endpoint.
+        `https://api.chzzk.naver.com/polling/v2/channels/${encodeURIComponent(channelId)}/live-status`,
       );
       // This is an unofficial polling API. chatChannelId is `null` (not
       // omitted) while the channel is offline, so only the absence of

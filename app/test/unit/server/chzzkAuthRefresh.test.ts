@@ -10,12 +10,36 @@ beforeEach(() => {
 });
 
 describe("server/api/chzzk/auth/refresh", () => {
+  it("rejects a GET request with 405 and does not call upstream (CSRF hardening)", async () => {
+    const fetchMock = vi.fn();
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+    const { event, getStatusCode } = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      method: "GET",
+    });
+
+    const result = await handler(event);
+
+    expect(getStatusCode()).toBe(405);
+    expect(result).toEqual({
+      status: "ERROR",
+      code: "method_not_allowed",
+      error: "Method Not Allowed",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("returns no_refresh_token without calling upstream when the cookie is absent", async () => {
     const fetchMock = vi.fn();
     globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
 
     const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
-    const { event } = createMockEvent({ url: "/api/chzzk/auth/refresh" });
+    const { event } = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      method: "POST",
+    });
 
     const result = await handler(event);
 
@@ -44,6 +68,7 @@ describe("server/api/chzzk/auth/refresh", () => {
     const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
     const { event, getResponseHeader } = createMockEvent({
       url: "/api/chzzk/auth/refresh",
+      method: "POST",
       headers: { cookie: "chzzk_refresh_token=rt-solo" },
     });
 
@@ -84,10 +109,12 @@ describe("server/api/chzzk/auth/refresh", () => {
 
     const call1 = createMockEvent({
       url: "/api/chzzk/auth/refresh",
+      method: "POST",
       headers: { cookie: "chzzk_refresh_token=rt-shared" },
     });
     const call2 = createMockEvent({
       url: "/api/chzzk/auth/refresh",
+      method: "POST",
       headers: { cookie: "chzzk_refresh_token=rt-shared" },
     });
 
@@ -159,10 +186,12 @@ describe("server/api/chzzk/auth/refresh", () => {
 
     const callA = createMockEvent({
       url: "/api/chzzk/auth/refresh",
+      method: "POST",
       headers: { cookie: "chzzk_refresh_token=rt-A" },
     });
     const callB = createMockEvent({
       url: "/api/chzzk/auth/refresh",
+      method: "POST",
       headers: { cookie: "chzzk_refresh_token=rt-B" },
     });
 
@@ -181,6 +210,7 @@ describe("server/api/chzzk/auth/refresh", () => {
     const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/auth/refresh",
+      method: "POST",
       headers: { cookie: "chzzk_refresh_token=rt-bad" },
     });
 
@@ -203,6 +233,7 @@ describe("server/api/chzzk/auth/refresh", () => {
     const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/auth/refresh",
+      method: "POST",
       headers: { cookie: "chzzk_refresh_token=rt-bad" },
     });
 
@@ -221,6 +252,7 @@ describe("server/api/chzzk/auth/refresh", () => {
     const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/auth/refresh",
+      method: "POST",
       headers: { cookie: "chzzk_refresh_token=rt-bad" },
     });
     globalThis.useRuntimeConfig = vi.fn(() => {

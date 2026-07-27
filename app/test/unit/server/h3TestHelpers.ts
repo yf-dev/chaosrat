@@ -8,7 +8,6 @@ import {
   sendRedirect,
   createError,
   defineEventHandler,
-  proxyRequest,
 } from "h3";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { vi } from "vitest";
@@ -16,10 +15,15 @@ import { createSingleFlight } from "~/server/utils/singleFlight";
 
 // The server/api/** handlers are Nitro route files: they reference
 // getCookie/setCookie/deleteCookie/readBody/getQuery/sendRedirect/
-// createError/defineEventHandler/proxyRequest/useRuntimeConfig as bare
-// identifiers, relying on Nitro's build-time auto-import (unimport) to wire
-// them up. Plain vitest never runs that build step, so importing a handler
-// module here would throw ReferenceError the moment it's invoked.
+// createError/defineEventHandler/useRuntimeConfig as bare identifiers,
+// relying on Nitro's build-time auto-import (unimport) to wire them up.
+// Plain vitest never runs that build step, so importing a handler module
+// here would throw ReferenceError the moment it's invoked. Handlers that
+// import an h3 helper explicitly instead (e.g.
+// server/api/youtubeLive/proxy/[...path].ts's readRawBody/getRequestHeader/
+// setResponseHeader/setResponseStatus) don't need an entry here -- a real
+// `import` works fine under vitest; only the auto-import convention needs
+// this shim.
 //
 // Rather than mock those away, we install the *real* h3 implementations onto
 // globalThis so the handler's own logic (cookie parsing/serialization, query
@@ -38,7 +42,6 @@ export function installH3Globals(
     getQuery,
     sendRedirect,
     createError,
-    proxyRequest,
     // server/utils/*.ts (e.g. createSingleFlight) is Nitro's own
     // auto-imported "server utils" convention — same bare-identifier
     // problem as the h3 helpers above, so it gets installed the same way.

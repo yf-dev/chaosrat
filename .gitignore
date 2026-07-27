@@ -7,3 +7,8 @@ docker-compose.*.yml
 # claude
 .claude
 CLAUDE.local.md
+
+# local env files
+.env
+.env.*
+!.env.example

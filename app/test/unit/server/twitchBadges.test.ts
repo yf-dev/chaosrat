@@ -44,7 +44,7 @@ describe("server/api/twitch/badges", () => {
           ],
         });
       }
-      if (url.startsWith("https://api.twitch.tv/helix/users?login=")) {
+      if (url.startsWith("https://api.twitch.tv/helix/users")) {
         return Promise.resolve({ data: [{ id: "broadcaster-1" }] });
       }
       if (
@@ -99,7 +99,7 @@ describe("server/api/twitch/badges", () => {
           ],
         });
       }
-      if (url.startsWith("https://api.twitch.tv/helix/users?login=")) {
+      if (url.startsWith("https://api.twitch.tv/helix/users")) {
         return Promise.resolve({ data: [] });
       }
       throw new Error(`unexpected $fetch url: ${url}`);
@@ -119,6 +119,135 @@ describe("server/api/twitch/badges", () => {
     });
     // token + global badges + broadcaster lookup only — no channel-badges call.
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not put the client secret (or client id) anywhere in the token request URL", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith("https://id.twitch.tv/oauth2/token")) {
+        return Promise.resolve({
+          access_token: "fake-app-token",
+          expires_in: 3600,
+          token_type: "bearer",
+        });
+      }
+      if (url === "https://api.twitch.tv/helix/chat/badges/global") {
+        return Promise.resolve({ data: [] });
+      }
+      if (url.startsWith("https://api.twitch.tv/helix/users")) {
+        return Promise.resolve({ data: [] });
+      }
+      throw new Error(`unexpected $fetch url: ${url}`);
+    });
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/twitch/badges")).default;
+    const { event } = createMockEvent({
+      url: "/api/twitch/badges?twitchChannelId=somechannel",
+    });
+
+    await handler(event);
+
+    const tokenCall = fetchMock.mock.calls.find((call: unknown[]) =>
+      (call[0] as string).startsWith("https://id.twitch.tv/oauth2/token"),
+    );
+    expect(tokenCall).toBeDefined();
+    const [tokenUrl] = tokenCall as [string, unknown];
+    // ofetch's FetchError.message embeds the full request URL, so a secret
+    // placed in the query string reaches the server log on any upstream
+    // failure. Assert it never appears there, regardless of how the
+    // credentials are actually sent.
+    expect(tokenUrl).not.toContain("fake-twitch-client-secret");
+    expect(tokenUrl).not.toContain("client_secret");
+    expect(tokenUrl).not.toContain("client_id");
+  });
+
+  it("sends the token request credentials and grant_type in the request body, not the query string", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith("https://id.twitch.tv/oauth2/token")) {
+        return Promise.resolve({
+          access_token: "fake-app-token",
+          expires_in: 3600,
+          token_type: "bearer",
+        });
+      }
+      if (url === "https://api.twitch.tv/helix/chat/badges/global") {
+        return Promise.resolve({ data: [] });
+      }
+      if (url.startsWith("https://api.twitch.tv/helix/users")) {
+        return Promise.resolve({ data: [] });
+      }
+      throw new Error(`unexpected $fetch url: ${url}`);
+    });
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/twitch/badges")).default;
+    const { event } = createMockEvent({
+      url: "/api/twitch/badges?twitchChannelId=somechannel",
+    });
+
+    await handler(event);
+
+    const tokenCall = fetchMock.mock.calls.find((call: unknown[]) =>
+      (call[0] as string).startsWith("https://id.twitch.tv/oauth2/token"),
+    );
+    expect(tokenCall).toBeDefined();
+    const [, tokenOptions] = tokenCall as [
+      string,
+      { method?: string; body?: unknown } | undefined,
+    ];
+    expect(tokenOptions?.method).toBe("POST");
+    const body = tokenOptions?.body;
+    expect(body).toBeDefined();
+    const params =
+      body instanceof URLSearchParams
+        ? body
+        : new URLSearchParams(body as string);
+    expect(params.get("client_id")).toBe("fake-twitch-client-id");
+    expect(params.get("client_secret")).toBe("fake-twitch-client-secret");
+    expect(params.get("grant_type")).toBe("client_credentials");
+  });
+
+  it("does not let an attacker-controlled twitchChannelId inject extra params into the helix users request", async () => {
+    const fetchMock = vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith("https://id.twitch.tv/oauth2/token")) {
+        return Promise.resolve({
+          access_token: "fake-app-token",
+          expires_in: 3600,
+          token_type: "bearer",
+        });
+      }
+      if (url === "https://api.twitch.tv/helix/chat/badges/global") {
+        return Promise.resolve({ data: [] });
+      }
+      if (url.startsWith("https://api.twitch.tv/helix/users")) {
+        return Promise.resolve({ data: [] });
+      }
+      throw new Error(`unexpected $fetch url: ${url}`);
+    });
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/twitch/badges")).default;
+    const { event } = createMockEvent({
+      url:
+        "/api/twitch/badges?twitchChannelId=" +
+        encodeURIComponent("foo&id=999"),
+    });
+
+    await handler(event);
+
+    const usersCall = fetchMock.mock.calls.find((call: unknown[]) =>
+      (call[0] as string).startsWith("https://api.twitch.tv/helix/users"),
+    );
+    expect(usersCall).toBeDefined();
+    const [usersUrl, usersOptions] = usersCall as [
+      string,
+      { query?: Record<string, unknown> } | undefined,
+    ];
+    const effectiveParams = usersOptions?.query
+      ? new URLSearchParams(usersOptions.query as Record<string, string>)
+      : new URL(usersUrl).searchParams;
+    expect(effectiveParams.get("login")).toBe("foo&id=999");
+    expect(effectiveParams.get("id")).toBeNull();
   });
 
   it("returns an internal_server_error when an upstream call throws", async () => {

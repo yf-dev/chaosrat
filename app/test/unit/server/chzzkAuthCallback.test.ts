@@ -77,6 +77,30 @@ describe("server/api/chzzk/auth/callback", () => {
     ["//evil.example/phish?x=1", "protocol-relative with path/query"],
     ["/\\evil.example", "single backslash (browsers normalise to /)"],
     ["/\\/evil.example", "backslash-then-slash (browsers normalise to //)"],
+    [
+      "/\t/evil.example",
+      "leading tab (WHATWG URL parser strips it, then // is protocol-relative)",
+    ],
+    [
+      "/\n/evil.example",
+      "leading newline (WHATWG URL parser strips it, then // is protocol-relative)",
+    ],
+    [
+      "/\r/evil.example",
+      "leading carriage return (WHATWG URL parser strips it, then // is protocol-relative)",
+    ],
+    [
+      "/\t\t//evil.example",
+      "multiple stripped characters ahead of an explicit //",
+    ],
+    [
+      "https://evil.example/",
+      "absolute https URL (already rejected pre-fix, kept as coverage)",
+    ],
+    [
+      "http://evil.example/",
+      "absolute http URL (already rejected pre-fix, kept as coverage)",
+    ],
   ])(
     "rejects an unsafe oauth_redirect cookie (%s, %s)",
     async (unsafeRedirect) => {
@@ -231,6 +255,66 @@ describe("server/api/chzzk/auth/callback", () => {
       status: "ERROR",
       code: "invalid_token",
       error: "Failed to get Chzzk access token",
+    });
+  });
+
+  it("re-serialises a same-origin absolute oauth_redirect cookie down to a path, stripping the origin", async () => {
+    globalThis.$fetch = vi.fn().mockResolvedValue({
+      code: 200,
+      message: null,
+      content: {
+        accessToken: "fake-access-token",
+        refreshToken: "fake-refresh-token",
+        tokenType: "Bearer",
+        expiresIn: 3600,
+        scope: "chat",
+      },
+    }) as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/auth/callback")).default;
+    const { event, getResponseHeader } = createMockEvent({
+      url: "/api/chzzk/auth/callback?code=abc123&state=good-state",
+      headers: {
+        cookie: `oauth_state=good-state; oauth_redirect=${encodeURIComponent(
+          "https://chaosrat.test/chat?theme=cute-left#frag",
+        )}`,
+      },
+    });
+
+    const result = await handler(event);
+
+    expect(result).not.toEqual(
+      expect.objectContaining({ code: "invalid_redirect" }),
+    );
+    // Pins re-serialisation: sendRedirect() must receive the re-parsed
+    // pathname+search+hash, not the raw cookie value -- this is what
+    // guarantees a parser-stripped character never reaches the Location
+    // header regardless of what the origin check above did or did not
+    // catch.
+    expect(getResponseHeader("location")).toBe("/chat?theme=cute-left#frag");
+  });
+
+  it("fails closed with invalid_redirect when the app's own baseURL is unset", async () => {
+    globalThis.useRuntimeConfig = vi.fn(() => ({
+      chzzkClientId: "fake-chzzk-client-id",
+      chzzkClientSecret: "fake-chzzk-client-secret",
+      twitchClientId: "fake-twitch-client-id",
+      twitchClientSecret: "fake-twitch-client-secret",
+      public: { baseURL: "" },
+    })) as unknown as typeof globalThis.useRuntimeConfig;
+
+    const handler = (await import("~/server/api/chzzk/auth/callback")).default;
+    const { event } = createMockEvent({
+      url: "/api/chzzk/auth/callback?code=abc123&state=good-state",
+      headers: { cookie: "oauth_state=good-state; oauth_redirect=%2Fchat" },
+    });
+
+    const result = await handler(event);
+
+    expect(result).toEqual({
+      status: "ERROR",
+      code: "invalid_redirect",
+      error: "Invalid redirect URL",
     });
   });
 });

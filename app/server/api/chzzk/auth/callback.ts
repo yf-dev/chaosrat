@@ -39,25 +39,50 @@ export default defineEventHandler(async (event): Promise<void | ApiError> => {
       redirectTo = "/";
     }
 
-    // Check redirect URL: must be a same-origin relative path only.
-    // `redirectTo.startsWith("/")` alone is not enough — "//evil.example"
-    // also starts with "/" but browsers resolve it as a protocol-relative
-    // URL to a different origin (an open redirect). Reject a leading "//"
-    // to close that. A backslash is rejected too, since browsers normalise
-    // "\" to "/" per the WHATWG URL spec, so "/\evil.example" and
-    // "/\/evil.example" are equivalent bypasses of the same check.
-    if (
-      typeof redirectTo !== "string" ||
-      !redirectTo.startsWith("/") ||
-      redirectTo.startsWith("//") ||
-      redirectTo.includes("\\")
-    ) {
+    // Check redirect URL: must resolve to the same origin as this app.
+    //
+    // This used to be a character-enumeration guard (reject a leading "//",
+    // reject "\"), which closed the protocol-relative and backslash
+    // bypasses but missed a third: the WHATWG URL parser silently strips
+    // TAB (U+0009), LF (U+000A) and CR (U+000D) before parsing, so
+    // "/\t/evil.example" satisfied every clause in that list — starts with
+    // "/", doesn't start with "//", has no backslash — yet a browser
+    // resolves it to "//evil.example", a protocol-relative URL to a
+    // different origin. That is not a sign the list needed a fourth
+    // clause; it is a sign enumerating forbidden characters can never be
+    // complete, because it requires knowing every normalisation a URL
+    // parser performs. Resolving against the app's own origin sidesteps
+    // that entirely: it asks the same parser the browser will use whether
+    // the *result* is same-origin, which is normalisation-complete by
+    // construction. Do not revert this to a `startsWith`/`includes`
+    // character list — that is exactly the shape of guard that has now
+    // failed twice.
+    let redirectTarget: URL;
+    try {
+      // `config.public.baseURL` may be unset in a misconfigured
+      // environment (it throws `new URL(..., "")`); fail closed rather
+      // than let redirect validation silently pass everything.
+      redirectTarget = new URL(redirectTo, config.public.baseURL);
+    } catch {
       return {
         status: "ERROR",
         code: "invalid_redirect",
         error: "Invalid redirect URL",
       };
     }
+    if (redirectTarget.origin !== new URL(config.public.baseURL).origin) {
+      return {
+        status: "ERROR",
+        code: "invalid_redirect",
+        error: "Invalid redirect URL",
+      };
+    }
+    // Redirect to the re-serialised path, not the raw cookie value. This is
+    // the load-bearing half of the fix: re-serialising through `URL` is what
+    // guarantees no parser-stripped character (TAB/LF/CR) ever reaches the
+    // `Location` header, regardless of what the origin check above did or
+    // did not catch.
+    redirectTo = `${redirectTarget.pathname}${redirectTarget.search}${redirectTarget.hash}`;
 
     try {
       // Exchange code for access token

@@ -490,7 +490,9 @@ async function loginToChzzk() {
 
 async function logoutFromChzzk() {
   try {
-    const response = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout");
+    const response = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout", {
+      method: "POST",
+    });
     if (response.status === "OK") {
       isChzzkLoggedIn.value = false;
       chzzkMeChannelId.value = "";
@@ -514,7 +516,9 @@ onMounted(async () => {
       chzzkMeChannelName.value = response.channelName;
 
       // try to refresh token
-      await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
+      await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
+        method: "POST",
+      });
     } else {
       console.error("Failed to get Chzzk me:", response);
     }

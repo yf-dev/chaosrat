@@ -1,8 +1,22 @@
+import { setResponseStatus } from "h3";
 import type { ChzzkSessionOpenResponse, ApiError } from "~/lib/interfaces";
 
 export default defineEventHandler(
   async (event): Promise<ChzzkSessionOpenResponse | ApiError> => {
     try {
+      // CSRF hardening: this route is state-changing (consumes one of the
+      // user's 3 concurrent CHZZK session slots), and sameSite: "lax"
+      // cookies are still sent on a cross-site top-level navigation (e.g. an
+      // attacker <a> link), so a bare GET must not trigger it.
+      if (event.method !== "POST") {
+        setResponseStatus(event, 405);
+        return {
+          status: "ERROR",
+          code: "method_not_allowed",
+          error: "Method Not Allowed",
+        };
+      }
+
       const accessToken = getCookie(event, "chzzk_access_token");
       if (!accessToken) {
         return {

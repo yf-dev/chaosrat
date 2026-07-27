@@ -3,12 +3,25 @@ services:
     build:
       context: .
       args:
+        # NODE_ENV is the only build-time input the Dockerfile still declares
+        # an ARG for (see Dockerfile for why the rest were removed).
         - NODE_ENV=dev
-        - NUXT_TWITCH_CLIENT_ID=your-twitch-client-id
-        - NUXT_TWITCH_CLIENT_SECRET=your-twitch-client-secret
-        - NUXT_CHZZK_CLIENT_ID=your-chzzk-client-id
-        - NUXT_CHZZK_CLIENT_SECRET=your-chzzk-client-secret
-        - NUXT_PUBLIC_BASE_URL=http://localhost:3000
+    # All NUXT_* values below are Nitro runtimeConfig and are resolved from
+    # the environment at container start / per-request, never at build (see
+    # the NOTE in Dockerfile). ${VAR} pulls each from the shell environment or
+    # from a `.env` file placed next to this compose file (docker compose
+    # loads it automatically; see .env.example for the full list and where
+    # `.env` is gitignored). The `:-` empty defaults below are required, not
+    # decorative: without one, `docker compose build` (which needs none of
+    # these) still warns "variable is not set" for every bare ${VAR} because
+    # interpolation runs at parse time -- do not "tidy" them away.
+    environment:
+      - NUXT_TWITCH_CLIENT_ID=${NUXT_TWITCH_CLIENT_ID:-}
+      - NUXT_TWITCH_CLIENT_SECRET=${NUXT_TWITCH_CLIENT_SECRET:-}
+      - NUXT_CHZZK_CLIENT_ID=${NUXT_CHZZK_CLIENT_ID:-}
+      - NUXT_CHZZK_CLIENT_SECRET=${NUXT_CHZZK_CLIENT_SECRET:-}
+      - NUXT_PUBLIC_BASE_URL=${NUXT_PUBLIC_BASE_URL:-http://localhost:3000}
+      - NUXT_PUBLIC_GTAG_ID=${NUXT_PUBLIC_GTAG_ID:-}
     restart: unless-stopped
     ports:
       - "3000:80"

@@ -961,7 +961,9 @@ describe("useChzzk", () => {
 
       await errors.value[0].onClick?.();
 
-      expect(fetchMock).toHaveBeenLastCalledWith("/api/chzzk/auth/logout");
+      expect(fetchMock).toHaveBeenLastCalledWith("/api/chzzk/auth/logout", {
+        method: "POST",
+      });
       expect(reloadMock).toHaveBeenCalled();
 
       window.location = originalLocation;

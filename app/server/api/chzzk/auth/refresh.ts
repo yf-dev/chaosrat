@@ -1,3 +1,4 @@
+import { setResponseStatus } from "h3";
 import type { ApiError, ApiOk } from "~/lib/interfaces";
 
 interface RefreshTokenResult {
@@ -20,6 +21,19 @@ const refreshFlight = createSingleFlight<RefreshTokenResult>({
 
 export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
   try {
+    // CSRF hardening: this route is state-changing (rotates the single-use
+    // refresh token), and sameSite: "lax" cookies are still sent on a
+    // cross-site top-level navigation (e.g. an attacker <a> link), so a bare
+    // GET must not trigger it.
+    if (event.method !== "POST") {
+      setResponseStatus(event, 405);
+      return {
+        status: "ERROR",
+        code: "method_not_allowed",
+        error: "Method Not Allowed",
+      };
+    }
+
     const config = useRuntimeConfig(event);
 
     const refreshToken = getCookie(event, "chzzk_refresh_token");

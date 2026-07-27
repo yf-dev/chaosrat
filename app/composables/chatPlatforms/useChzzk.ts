@@ -103,6 +103,7 @@ export function useChzzk(options: {
       const data = await $fetch<ChzzkSessionOpenResponse | ApiError>(
         "/api/chzzk/session/open",
         {
+          method: "POST",
           timeout: 5000,
         },
       );
@@ -115,7 +116,9 @@ export function useChzzk(options: {
       return { status: "ERROR", code: data.code };
     },
     refreshToken: async () => {
-      const result = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
+      const result = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
+        method: "POST",
+      });
       return result.status === "OK";
     },
     createSocket: (url, handlers) => {
@@ -360,7 +363,9 @@ export function useChzzk(options: {
         "로그인한 치지직 계정과 채널 ID가 일치하지 않습니다. 채널 ID를 변경하거나 이 메시지를 클릭해 로그아웃하세요.",
       onClick: async () => {
         try {
-          await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout");
+          await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout", {
+            method: "POST",
+          });
           window.location.reload();
         } catch (e) {
           console.error("Failed to logout from Chzzk:", e);
@@ -406,7 +411,9 @@ export function useChzzk(options: {
     }
 
     try {
-      await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh");
+      await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
+        method: "POST",
+      });
       if (await checkMe()) return;
     } catch {
       // Refresh failed

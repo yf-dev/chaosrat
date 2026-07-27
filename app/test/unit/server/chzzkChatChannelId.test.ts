@@ -107,6 +107,54 @@ describe("server/api/chzzk/chatChannelId", () => {
     });
   });
 
+  it("encodes a channelId containing path-traversal segments instead of letting them escape the URL path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      code: 200,
+      content: {
+        status: "CLOSE",
+        openDate: null,
+        chatChannelId: null,
+      },
+    });
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/chatChannelId")).default;
+    const { event } = createMockEvent({
+      url:
+        "/api/chzzk/chatChannelId?channelId=" +
+        encodeURIComponent("../../../open/v1/lives"),
+    });
+
+    await handler(event);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.chzzk.naver.com/polling/v2/channels/..%2F..%2F..%2Fopen%2Fv1%2Flives/live-status",
+    );
+  });
+
+  it("still requests the plain channel URL for an ordinary alphanumeric channelId", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      code: 200,
+      content: {
+        status: "OPEN",
+        openDate: "2026-07-26 14:09:18",
+        chatChannelId: "chat-channel-1",
+      },
+    });
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+    const handler = (await import("~/server/api/chzzk/chatChannelId")).default;
+    const { event } = createMockEvent({
+      url: "/api/chzzk/chatChannelId?channelId=abc",
+    });
+
+    await handler(event);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.chzzk.naver.com/polling/v2/channels/abc/live-status",
+    );
+  });
+
   it("returns internal_server_error when $fetch throws", async () => {
     globalThis.$fetch = vi
       .fn()
