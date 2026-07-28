@@ -147,6 +147,212 @@ describe("createSingleFlight", () => {
     nowSpy.mockRestore();
   });
 
+  it("rejects a call whose fn never settles once inFlightTimeoutMs elapses, and releases the key so the next call retries", async () => {
+    vi.useFakeTimers();
+    try {
+      const flight = createSingleFlight<string>({
+        cacheMs: 60_000,
+        inFlightTimeoutMs: 5_000,
+      });
+
+      // A fn that never resolves or rejects, modeling a hung upstream $fetch
+      // with no timeout of its own.
+      const hungFn = vi.fn(() => new Promise<string>(() => {}));
+
+      const pending = flight.run("key", hungFn);
+      // Attach a rejection handler synchronously so Node/vitest never sees
+      // this as an unhandled rejection while the timer is pending.
+      const assertion = expect(pending).rejects.toThrow();
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await assertion;
+
+      // The key must have been released: a second call invokes fn again
+      // instead of joining the same dead in-flight promise.
+      const fn2 = vi.fn(() => Promise.resolve("recovered"));
+      const result = await flight.run("key", fn2);
+
+      expect(result).toBe("recovered");
+      expect(fn2).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("timeout error message does not contain the key (which may be a secret token)", async () => {
+    vi.useFakeTimers();
+    try {
+      const flight = createSingleFlight<string>({
+        cacheMs: 60_000,
+        inFlightTimeoutMs: 5_000,
+      });
+
+      const secretKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+      const hungFn = vi.fn(() => new Promise<string>(() => {}));
+
+      const pending = flight.run(secretKey, hungFn);
+
+      let capturedError: Error | undefined;
+      pending.catch((err) => {
+        capturedError = err;
+      });
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(capturedError).toBeDefined();
+      expect(capturedError!.message).toMatch(/did not settle within/);
+      // This is the actual regression guard: the error message must NOT leak
+      // the key (which could be an access token, refresh token, or other
+      // credential). If this assertion fails, the key is being logged.
+      expect(capturedError!.message).not.toContain(secretKey);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not cache a value produced by a call that already timed out", async () => {
+    vi.useFakeTimers();
+    try {
+      const flight = createSingleFlight<string>({
+        cacheMs: 60_000,
+        inFlightTimeoutMs: 5_000,
+      });
+
+      let resolveHung!: (value: string) => void;
+      const hungFn = vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveHung = resolve;
+          }),
+      );
+
+      const pending = flight.run("key", hungFn);
+      const assertion = expect(pending).rejects.toThrow();
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await assertion;
+
+      // The original fn finally settles after the timeout already fired.
+      // That must not throw an unhandled rejection and must not resurrect
+      // a cache entry for the key.
+      resolveHung("late value");
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(flight.size()).toBe(0);
+
+      const fn2 = vi.fn(() => Promise.resolve("fresh"));
+      const result = await flight.run("key", fn2);
+
+      expect(result).toBe("fresh");
+      expect(fn2).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("guards a late rejection (after the in-flight timeout already fired) from disturbing a new call that reused the released key", async () => {
+    // Covers the rejection branch of the `if (timedOut) { return; }` guard
+    // (the resolution-branch guard is already covered by "does not cache a
+    // value produced by a call that already timed out" above). A fn whose
+    // promise *rejects* only after inFlightTimeoutMs has elapsed must not
+    // let that late rejection reach back into the `inFlight` map, because by
+    // then the key may already belong to an unrelated, still-pending call.
+    vi.useFakeTimers();
+    try {
+      const flight = createSingleFlight<string>({
+        cacheMs: 60_000,
+        inFlightTimeoutMs: 5_000,
+      });
+
+      let rejectLate!: (err: unknown) => void;
+      const staleFn = vi.fn(
+        () =>
+          new Promise<string>((_resolve, reject) => {
+            rejectLate = reject;
+          }),
+      );
+
+      const first = flight.run("key", staleFn);
+      const firstAssertion = expect(first).rejects.toThrow(
+        /did not settle within/,
+      );
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await firstAssertion;
+
+      // A fresh call reuses the now-released key while `staleFn`'s promise
+      // is still pending -- this models a real caller starting a new
+      // attempt right after the timeout.
+      let resolveSecond!: (value: string) => void;
+      const secondFn = vi.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+      const second = flight.run("key", secondFn);
+
+      // The original call finally rejects, long after its own timeout. If
+      // the guard did not exist, this handler would delete the "key" entry
+      // that now belongs to the second, still-pending call -- breaking
+      // single-flight collapsing for anyone calling run("key", ...) in this
+      // window, and this rejection must also not surface as an unhandled
+      // rejection.
+      rejectLate(new Error("late failure"));
+      await vi.advanceTimersByTimeAsync(0);
+
+      const thirdFn = vi.fn(() => Promise.resolve("third"));
+      const thirdPromise = flight.run("key", thirdFn);
+
+      resolveSecond("second value");
+      const [secondResult, thirdResult] = await Promise.all([
+        second,
+        thirdPromise,
+      ]);
+
+      expect(thirdFn).not.toHaveBeenCalled();
+      expect(secondResult).toBe("second value");
+      expect(thirdResult).toBe("second value");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not time out a call that settles before inFlightTimeoutMs (default limit does not interfere with normal use)", async () => {
+    vi.useFakeTimers();
+    try {
+      const flight = createSingleFlight<string>({ cacheMs: 60_000 });
+      const fn = vi.fn(() => Promise.resolve("value"));
+
+      const result = await flight.run("key", fn);
+
+      expect(result).toBe("value");
+      expect(fn).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("clears the timeout timer on normal settlement (no dangling timer keeping the process alive)", async () => {
+    vi.useFakeTimers();
+    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+    try {
+      const flight = createSingleFlight<string>({
+        cacheMs: 60_000,
+        inFlightTimeoutMs: 5_000,
+      });
+      const fn = vi.fn(() => Promise.resolve("value"));
+
+      await flight.run("key", fn);
+
+      expect(clearTimeoutSpy).toHaveBeenCalled();
+    } finally {
+      clearTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("evicts expired entries even when their key is never looked up again (no unbounded cache growth)", async () => {
     // Models the real caller: keys are one-shot CHZZK refresh-token values,
     // so an expired entry's key is never queried again and must not linger

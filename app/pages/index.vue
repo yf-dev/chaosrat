@@ -340,7 +340,8 @@
 </template>
 
 <script setup lang="ts">
-import { useClipboard } from "@vueuse/core";
+import { useClipboard, useTimeoutPoll } from "@vueuse/core";
+import { BroadcastChannel } from "broadcast-channel";
 import type {
   ChatTheme,
   SoundEffectType,
@@ -350,6 +351,10 @@ import type {
   ChzzkMeResponse,
 } from "~/lib/interfaces";
 import { encodeUrlSafeBase64, parseIntOrDefault } from "~/lib/utils";
+import {
+  createChzzkAuthBroadcast,
+  type ChzzkAuthState,
+} from "~/lib/chzzkAuthBroadcast";
 
 useHead({
   title: "ChaosRat - 채팅 오버레이 URL 생성",
@@ -494,10 +499,8 @@ async function logoutFromChzzk() {
       method: "POST",
     });
     if (response.status === "OK") {
-      isChzzkLoggedIn.value = false;
-      chzzkMeChannelId.value = "";
-      chzzkMeChannelName.value = "";
-      chzzkChannelId.value = "";
+      applyChzzkAuthState({ status: "LOGIN_REQUIRED" });
+      chzzkAuthBroadcast.publish({ status: "LOGIN_REQUIRED" });
     } else {
       console.error("Failed to logout from Chzzk:", response);
     }
@@ -506,25 +509,86 @@ async function logoutFromChzzk() {
   }
 }
 
-onMounted(async () => {
-  try {
-    const response = await $fetch<ChzzkMeResponse | ApiError>("/api/chzzk/me");
-    if (response.status === "OK") {
-      isChzzkLoggedIn.value = true;
-      chzzkChannelId.value = response.channelId;
-      chzzkMeChannelId.value = response.channelId;
-      chzzkMeChannelName.value = response.channelName;
+// Applies a resolved auth state locally, whether it came from this tab's own
+// check or from another tab's broadcast. Deliberately does not touch
+// chzzkChannelId when moving to AUTHENTICATED if it's already set -- once
+// populated, it must not be clobbered by a later check (see the "OK" branch
+// below).
+function applyChzzkAuthState(state: ChzzkAuthState) {
+  if (state.status === "AUTHENTICATED") {
+    isChzzkLoggedIn.value = true;
+    if (!chzzkChannelId.value) {
+      chzzkChannelId.value = state.channelId;
+    }
+    chzzkMeChannelId.value = state.channelId;
+    chzzkMeChannelName.value = state.channelName;
+  } else {
+    isChzzkLoggedIn.value = false;
+    chzzkMeChannelId.value = "";
+    chzzkMeChannelName.value = "";
+    chzzkChannelId.value = "";
+  }
+}
 
-      // try to refresh token
-      await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
-        method: "POST",
-      });
+// Cross-tab push: lets another tab's login/logout show up here immediately,
+// instead of waiting for this tab's own 60s poll below to catch up. See
+// `lib/chzzkAuthBroadcast.ts`.
+const chzzkAuthBroadcast = createChzzkAuthBroadcast({
+  createChannel: (name) => new BroadcastChannel(name),
+  onRemoteState: applyChzzkAuthState,
+});
+
+// Only refresh the CHZZK token once, as a mount-time keep-alive -- NOT on
+// every poll tick. The refresh token is single-use (see the comment block at
+// the top of server/api/chzzk/auth/refresh.ts), so rotating it every 60s in
+// every open settings tab would invalidate it out from under itself.
+let hasRefreshedChzzkToken = false;
+
+async function checkChzzkAuth() {
+  try {
+    // A stalled request must not wedge the poll forever: useTimeoutPoll's
+    // loop is `await fn(); start();`, so the next tick only arms once this
+    // call settles, and $fetch has no default timeout.
+    const response = await $fetch<ChzzkMeResponse | ApiError>("/api/chzzk/me", {
+      timeout: 5000,
+    });
+    if (response.status === "OK") {
+      const state: ChzzkAuthState = {
+        status: "AUTHENTICATED",
+        channelId: response.channelId,
+        channelName: response.channelName,
+      };
+      applyChzzkAuthState(state);
+      chzzkAuthBroadcast.publish(state);
+
+      if (!hasRefreshedChzzkToken) {
+        hasRefreshedChzzkToken = true;
+        try {
+          await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
+            method: "POST",
+            timeout: 5000,
+          });
+        } catch (e) {
+          console.error("Failed to refresh Chzzk token:", e);
+        }
+      }
     } else {
-      console.error("Failed to get Chzzk me:", response);
+      // An explicit ERROR envelope from our own server: the user genuinely
+      // has no valid session.
+      applyChzzkAuthState({ status: "LOGIN_REQUIRED" });
+      chzzkAuthBroadcast.publish({ status: "LOGIN_REQUIRED" });
     }
   } catch (e) {
+    // A thrown $fetch is a network/timeout failure, not a definitive answer
+    // -- leave the existing state alone rather than flipping to logged-out.
     console.error("Failed to check Chzzk me:", e);
   }
+}
+
+useTimeoutPoll(checkChzzkAuth, 60_000, { immediate: true });
+
+onScopeDispose(() => {
+  void chzzkAuthBroadcast.close();
 });
 </script>
 

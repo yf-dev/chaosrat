@@ -11,7 +11,10 @@ interface ChzzkIdentity {
 // upstream lookup, and caches the result for 30s. Keying on the token (not a
 // constant) means a token rotation is an immediate cache miss, so a new
 // user's identity is never served from a stale entry.
-const meFlight = createSingleFlight<ChzzkIdentity>({ cacheMs: 30_000 });
+const meFlight = createSingleFlight<ChzzkIdentity>({
+  cacheMs: 30_000,
+  inFlightTimeoutMs: 5_000,
+});
 
 export default defineEventHandler(
   async (event): Promise<ChzzkMeResponse | ApiError> => {
@@ -36,6 +39,7 @@ export default defineEventHandler(
           };
         }>("https://openapi.chzzk.naver.com/open/v1/users/me", {
           headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 5000,
         });
 
         if (!response.content?.channelId || !response.content?.channelName) {

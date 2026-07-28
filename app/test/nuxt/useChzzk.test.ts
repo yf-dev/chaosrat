@@ -7,6 +7,10 @@ import type {
   ChzzkChatSessionMessage,
 } from "~/lib/chzzkConnection";
 import type { SharedConnectionOptions } from "~/composables/useSharedConnection";
+import type {
+  ChzzkAuthBroadcastDeps,
+  ChzzkAuthState,
+} from "~/lib/chzzkAuthBroadcast";
 
 // `useChzzk` wraps two real transports: `createChzzkConnection` (the
 // socket.io session state machine, already covered end-to-end by
@@ -39,17 +43,34 @@ const {
   capturedConnectionDeps,
   capturedSharedOptions,
   capturedConnection,
+  capturedAuthBroadcastDeps,
+  capturedAuthBroadcast,
   useTimeoutPollMock,
   fetchMock,
+  fakeBroadcastChannelCtor,
 } = vi.hoisted(() => {
   return {
     capturedConnectionDeps: { current: undefined as unknown },
     capturedSharedOptions: { current: undefined as unknown },
     capturedConnection: { current: undefined as unknown },
+    capturedAuthBroadcastDeps: { current: undefined as unknown },
+    capturedAuthBroadcast: { current: undefined as unknown },
     useTimeoutPollMock: vi.fn(),
     fetchMock: vi.fn(),
+    // useChzzk's `createChannel` dep (passed to createChzzkAuthBroadcast,
+    // itself mocked below) does `new BroadcastChannel(name)` for real --
+    // mock the package so exercising that dep in a test never opens a real
+    // channel. `useSharedConnection` also imports from "broadcast-channel",
+    // but that whole module is mocked separately below, so its real
+    // implementation (and that import) never loads -- this mock cannot
+    // disturb it.
+    fakeBroadcastChannelCtor: vi.fn(),
   };
 });
+
+vi.mock("broadcast-channel", () => ({
+  BroadcastChannel: fakeBroadcastChannelCtor,
+}));
 
 // `useChzzk` also polls `checkAuth` via `useTimeoutPoll(checkAuth, 60_000, {
 // immediate: true })`. Never auto-fire it -- tests that need checkAuth's
@@ -73,9 +94,26 @@ vi.mock("~/lib/chzzkConnection", () => ({
       start: vi.fn(),
       stop: vi.fn(async () => {}),
       isRunning: vi.fn(() => false),
+      notifyAuthChanged: vi.fn(),
     };
     capturedConnection.current = connection;
     return connection;
+  }),
+}));
+
+// The real module opens a BroadcastChannel; mocked out here the same way as
+// useSharedConnection below -- capture the deps object so tests can drive
+// onRemoteState directly, and capture the returned {publish, close} so tests
+// can assert what useChzzk pushed out.
+vi.mock("~/lib/chzzkAuthBroadcast", () => ({
+  createChzzkAuthBroadcast: vi.fn((deps: ChzzkAuthBroadcastDeps) => {
+    capturedAuthBroadcastDeps.current = deps;
+    const broadcast = {
+      publish: vi.fn(),
+      close: vi.fn(async () => {}),
+    };
+    capturedAuthBroadcast.current = broadcast;
+    return broadcast;
   }),
 }));
 
@@ -97,6 +135,24 @@ function deps(): ChzzkConnectionDeps {
 
 function sharedOptions(): SharedConnectionOptions<unknown> {
   return capturedSharedOptions.current as SharedConnectionOptions<unknown>;
+}
+
+function authBroadcastDeps(): ChzzkAuthBroadcastDeps {
+  return capturedAuthBroadcastDeps.current as ChzzkAuthBroadcastDeps;
+}
+
+function authBroadcast(): {
+  publish: ReturnType<typeof vi.fn>;
+  close: ReturnType<typeof vi.fn>;
+} {
+  return capturedAuthBroadcast.current as {
+    publish: ReturnType<typeof vi.fn>;
+    close: ReturnType<typeof vi.fn>;
+  };
+}
+
+function emitRemoteAuthState(state: ChzzkAuthState) {
+  authBroadcastDeps().onRemoteState(state);
 }
 
 // `fetchLiveSignal`/`fetchSubscriptionHealth` are declared optional on
@@ -149,6 +205,7 @@ function setUp(query: LocationQuery = {}) {
   vi.stubGlobal("$fetch", fetchMock);
   fetchMock.mockReset();
   useTimeoutPollMock.mockClear();
+  fakeBroadcastChannelCtor.mockClear();
   setActivePinia(createPinia());
   vi.mocked(useRoute).mockReturnValue(fakeRoute(query));
 }
@@ -1047,8 +1104,161 @@ describe("useChzzk", () => {
       // The watch on chzzkChannelId fired its own checkAuth() independently
       // of the polled one, reaching /api/chzzk/me without needing the
       // 60s poll to tick.
-      expect(fetchMock).toHaveBeenCalledWith("/api/chzzk/me");
+      expect(fetchMock).toHaveBeenCalledWith("/api/chzzk/me", {
+        timeout: 5000,
+      });
       expect(errors.value.map((e) => e.id)).toEqual(["chzzk-login"]);
+    });
+  });
+
+  describe("auth broadcast (cross-tab push)", () => {
+    it("applies a remote state while chzzkChannelId is unset: hides both errors and returns before touching the connection", () => {
+      setUp(); // no chzzkChannelId configured
+      const { errors } = useChzzk({});
+      // Seed a login error the same way the real onAuthRequired path would,
+      // so hiding it is an observable effect rather than a no-op.
+      deps().onAuthRequired(true);
+      expect(errors.value).toHaveLength(1);
+
+      emitRemoteAuthState({
+        status: "AUTHENTICATED",
+        channelId: "chan-1",
+        channelName: "name",
+      });
+
+      expect(errors.value).toHaveLength(0);
+      // The unset-chzzkChannelId branch returns before the AUTHENTICATED
+      // branch's connection.notifyAuthChanged() call -- assert that early
+      // return actually happened, not just that errors ended up empty.
+      const connection = capturedConnection.current as {
+        notifyAuthChanged: ReturnType<typeof vi.fn>;
+      };
+      expect(connection.notifyAuthChanged).not.toHaveBeenCalled();
+    });
+
+    it("createChannel (dep passed to createChzzkAuthBroadcast) constructs a BroadcastChannel with the given name, without touching a real channel", () => {
+      setUp();
+      useChzzk({});
+
+      const channel = authBroadcastDeps().createChannel("chaosrat-chzzk-auth");
+
+      expect(fakeBroadcastChannelCtor).toHaveBeenCalledWith(
+        "chaosrat-chzzk-auth",
+      );
+      expect(channel).toBeInstanceOf(fakeBroadcastChannelCtor);
+    });
+
+    it("applies a remote AUTHENTICATED state for the matching channel: clears errors and notifies the connection", () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      const { errors } = useChzzk({});
+      // Seed a login error the same way the real onAuthRequired path would.
+      deps().onAuthRequired(true);
+      expect(errors.value).toHaveLength(1);
+
+      emitRemoteAuthState({
+        status: "AUTHENTICATED",
+        channelId: "chan-1",
+        channelName: "name",
+      });
+
+      expect(errors.value).toHaveLength(0);
+      const connection = capturedConnection.current as {
+        notifyAuthChanged: ReturnType<typeof vi.fn>;
+      };
+      expect(connection.notifyAuthChanged).toHaveBeenCalledTimes(1);
+    });
+
+    it("applies a remote AUTHENTICATED state for a different channel: raises the ccid-mismatch error instead", () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      const { errors } = useChzzk({});
+
+      emitRemoteAuthState({
+        status: "AUTHENTICATED",
+        channelId: "chan-2",
+        channelName: "name",
+      });
+
+      expect(errors.value.map((e) => e.id)).toEqual(["chzzk-ccid-mismatch"]);
+    });
+
+    it("applies a remote LOGIN_REQUIRED state: raises the login error", () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      const { errors } = useChzzk({});
+
+      emitRemoteAuthState({ status: "LOGIN_REQUIRED" });
+
+      expect(errors.value.map((e) => e.id)).toEqual(["chzzk-login"]);
+    });
+
+    it("checkAuth publishes the resolved AUTHENTICATED state", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "name",
+      });
+      useChzzk({});
+
+      await checkAuth();
+
+      expect(authBroadcast().publish).toHaveBeenCalledWith({
+        status: "AUTHENTICATED",
+        channelId: "chan-1",
+        channelName: "name",
+      });
+    });
+
+    it("checkAuth publishes LOGIN_REQUIRED when auth resolution ultimately fails", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({ status: "ERROR", code: "x", error: "x" });
+      useChzzk({});
+
+      await checkAuth();
+
+      expect(authBroadcast().publish).toHaveBeenCalledWith({
+        status: "LOGIN_REQUIRED",
+      });
+    });
+
+    it("publishes LOGIN_REQUIRED from the ccid-mismatch logout handler, before reloading", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock
+        .mockResolvedValueOnce({
+          status: "OK",
+          channelId: "chan-2",
+          channelName: "name",
+        })
+        .mockResolvedValueOnce({ status: "OK" }); // logout
+      const { errors } = useChzzk({});
+      await checkAuth();
+      expect(errors.value.map((e) => e.id)).toEqual(["chzzk-ccid-mismatch"]);
+
+      const originalLocation = window.location;
+      // @ts-expect-error -- intentional test-only override
+      delete window.location;
+      window.location = { reload: vi.fn() } as unknown as Location;
+
+      await errors.value[0].onClick?.();
+
+      expect(authBroadcast().publish).toHaveBeenCalledWith({
+        status: "LOGIN_REQUIRED",
+      });
+
+      window.location = originalLocation;
+    });
+
+    it("closes the auth broadcast when the owning effect scope is disposed", () => {
+      setUp();
+      const scope = effectScope();
+      scope.run(() => {
+        useChzzk({});
+      });
+
+      expect(authBroadcast().close).not.toHaveBeenCalled();
+
+      scope.stop();
+
+      expect(authBroadcast().close).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -17,6 +17,7 @@ interface RefreshTokenResult {
 // already-invalidated token.
 const refreshFlight = createSingleFlight<RefreshTokenResult>({
   cacheMs: 60_000,
+  inFlightTimeoutMs: 5_000,
 });
 
 export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
@@ -61,6 +62,7 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
         }>("/auth/v1/token", {
           baseURL: "https://chzzk.naver.com",
           method: "POST",
+          timeout: 5000,
           body: {
             grantType: "refresh_token",
             refreshToken: refreshToken,

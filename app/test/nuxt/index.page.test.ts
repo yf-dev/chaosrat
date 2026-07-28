@@ -9,6 +9,10 @@ import { ref } from "vue";
 import type { LocationQuery, RouteLocationNormalizedLoaded } from "vue-router";
 import IndexPage from "~/pages/index.vue";
 import { encodeUrlSafeBase64 } from "~/lib/utils";
+import type {
+  ChzzkAuthBroadcastDeps,
+  ChzzkAuthState,
+} from "~/lib/chzzkAuthBroadcast";
 
 // `pages/index.vue` is the overlay URL builder: its real logic is reading
 // form state and producing the `/chat?...` query string (base64-encoding the
@@ -40,6 +44,86 @@ import { encodeUrlSafeBase64 } from "~/lib/utils";
 // never via a direct input), are out of scope for a URL-builder test focused
 // on the fields the user actually types into.
 
+// `useTimeoutPoll` is mocked the same way `test/nuxt/useChzzk.test.ts` mocks
+// it: capture the polled callback via `useTimeoutPollMock` instead of letting
+// a real 60s timer run in tests. Unlike that file, this mock also auto-fires
+// the callback once when `immediate: true` is passed -- matching what the
+// real implementation does synchronously at setup time (see
+// `useTimeoutPoll`'s `resume()` in `@vueuse/core`) -- so every existing test
+// below that relied on the old `onMounted`-triggered `/api/chzzk/me` check
+// keeps working unchanged. Tests that care about a *later* tick call
+// `pollCheckChzzkAuth()` to invoke the captured callback again.
+const { useTimeoutPollMock } = vi.hoisted(() => ({
+  useTimeoutPollMock: vi.fn(),
+}));
+
+// Mirrors `test/nuxt/useChzzk.test.ts`'s harness for the same module: capture
+// the `deps` passed to `createChzzkAuthBroadcast` (so `onRemoteState` can be
+// driven directly, simulating a message from another tab) and the returned
+// `{ publish, close }` (so what this page pushes out can be asserted). No
+// real `BroadcastChannel` is ever opened.
+const { capturedAuthBroadcastDeps, capturedAuthBroadcast } = vi.hoisted(() => ({
+  capturedAuthBroadcastDeps: { current: undefined as unknown },
+  capturedAuthBroadcast: { current: undefined as unknown },
+}));
+
+vi.mock("~/lib/chzzkAuthBroadcast", () => ({
+  createChzzkAuthBroadcast: vi.fn((deps: ChzzkAuthBroadcastDeps) => {
+    capturedAuthBroadcastDeps.current = deps;
+    const broadcast = {
+      publish: vi.fn(),
+      close: vi.fn(async () => {}),
+    };
+    capturedAuthBroadcast.current = broadcast;
+    return broadcast;
+  }),
+}));
+
+function authBroadcastDeps(): ChzzkAuthBroadcastDeps {
+  return capturedAuthBroadcastDeps.current as ChzzkAuthBroadcastDeps;
+}
+
+function authBroadcast(): {
+  publish: ReturnType<typeof vi.fn<(state: ChzzkAuthState) => void>>;
+  close: ReturnType<typeof vi.fn<() => Promise<void>>>;
+} {
+  return capturedAuthBroadcast.current as {
+    publish: ReturnType<typeof vi.fn<(state: ChzzkAuthState) => void>>;
+    close: ReturnType<typeof vi.fn<() => Promise<void>>>;
+  };
+}
+
+// Invokes the callback `useTimeoutPoll` was given, simulating a later poll
+// tick (the initial one already ran via the mock's auto-fire-on-immediate
+// behaviour, see above).
+function pollCheckChzzkAuth(): Promise<void> {
+  const calls = useTimeoutPollMock.mock.calls;
+  return calls[calls.length - 1][0]();
+}
+
+// `~/lib/chzzkAuthBroadcast` is mocked wholesale above, so the real
+// `createChzzkAuthBroadcast` -- and therefore its `deps.createChannel`
+// factory -- never runs. That factory (`(name) => new BroadcastChannel(name)`
+// in pages/index.vue) is exercised directly by calling
+// `authBroadcastDeps().createChannel(...)` in a dedicated test; `BroadcastChannel`
+// itself is mocked here too so that call never opens a real channel. Mirrors
+// `test/unit/useSharedConnectionElectorMock.test.ts`'s mock of the same
+// library: a real `function`, not an arrow, so `new BroadcastChannel(...)`
+// stays a valid construct call.
+const { broadcastChannelMock } = vi.hoisted(() => ({
+  broadcastChannelMock: vi.fn(function BroadcastChannel() {
+    return {
+      close: vi.fn(async () => {}),
+      postMessage: vi.fn(),
+      onmessage: null,
+    };
+  }),
+}));
+
+vi.mock("broadcast-channel", () => ({
+  BroadcastChannel: broadcastChannelMock,
+}));
+
 vi.mock("@vueuse/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@vueuse/core")>();
   return {
@@ -48,6 +132,19 @@ vi.mock("@vueuse/core", async (importOriginal) => {
       copy: vi.fn(async () => undefined),
       copied: ref(false),
     })),
+    useTimeoutPoll: vi.fn(
+      (
+        fn: () => void | Promise<void>,
+        interval: number,
+        options?: { immediate?: boolean },
+      ) => {
+        useTimeoutPollMock(fn, interval, options);
+        if (options?.immediate) {
+          void fn();
+        }
+        return { pause: vi.fn(), resume: vi.fn(), isActive: ref(false) };
+      },
+    ),
   };
 });
 
@@ -85,6 +182,19 @@ async function mountIndexPage() {
 
 function urlInputValue(wrapper: Awaited<ReturnType<typeof mountIndexPage>>) {
   return (wrapper.find("#chatOverlayUrl").element as HTMLInputElement).value;
+}
+
+async function mountWithChzzkMe(
+  meResponse: unknown,
+  refreshResponse: unknown = { status: "OK" },
+) {
+  registerEndpoint("/api/chzzk/me", () => meResponse);
+  registerEndpoint("/api/chzzk/auth/refresh", () => refreshResponse);
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  const wrapper = await mountSuspended(IndexPage);
+  await flushPromises();
+  consoleError.mockRestore();
+  return wrapper;
 }
 
 describe("pages/index.vue", () => {
@@ -264,21 +374,6 @@ describe("pages/index.vue", () => {
   // non-OK/throw for each of three async functions) that was previously
   // entirely untested.
   describe("chzzk login/logout flow", () => {
-    async function mountWithChzzkMe(
-      meResponse: unknown,
-      refreshResponse: unknown = { status: "OK" },
-    ) {
-      registerEndpoint("/api/chzzk/me", () => meResponse);
-      registerEndpoint("/api/chzzk/auth/refresh", () => refreshResponse);
-      const consoleError = vi
-        .spyOn(console, "error")
-        .mockImplementation(() => {});
-      const wrapper = await mountSuspended(IndexPage);
-      await flushPromises();
-      consoleError.mockRestore();
-      return wrapper;
-    }
-
     it("onMounted: logs in, includes chzzkChannelId in the URL, and refreshes the token on a successful /api/chzzk/me", async () => {
       const wrapper = await mountWithChzzkMe({
         status: "OK",
@@ -438,6 +533,256 @@ describe("pages/index.vue", () => {
 
       expect(wrapper.text()).toContain("현재 로그인한 치지직 채널: My Channel");
       consoleError.mockRestore();
+    });
+  });
+
+  // Closes the bug this page had: it checked CHZZK login state exactly once,
+  // in `onMounted`, and never again -- so a login/logout completed in another
+  // tab (or even in this same tab after 60s) never showed up without a
+  // manual reload. These tests cover the three mechanisms that fix that: this
+  // page's own 60s poll, an inbound push from another tab, and an outbound
+  // push on this tab's own logout. See `lib/chzzkAuthBroadcast.ts` for the
+  // push channel itself (unit-tested independently in
+  // `test/unit/chzzkAuthBroadcast.test.ts`) and the harness above for how it
+  // and `useTimeoutPoll` are mocked here.
+  describe("chzzk auth: cross-tab broadcast and re-polling", () => {
+    it("a remote AUTHENTICATED state switches the page to the logged-in UI without an extra /api/chzzk/me call", async () => {
+      const meHandler = vi.fn(() => ({
+        status: "ERROR",
+        code: "NOT_LOGGED_IN",
+        error: "not logged in",
+      }));
+      registerEndpoint("/api/chzzk/me", meHandler);
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const wrapper = await mountSuspended(IndexPage);
+      await flushPromises();
+      consoleError.mockRestore();
+
+      expect(wrapper.text()).toContain("치지직 로그인");
+      expect(meHandler).toHaveBeenCalledTimes(1);
+
+      authBroadcastDeps().onRemoteState({
+        status: "AUTHENTICATED",
+        channelId: "remote-chan",
+        channelName: "Remote Channel",
+      });
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.text()).toContain(
+        "현재 로그인한 치지직 채널: Remote Channel",
+      );
+      expect(urlInputValue(wrapper)).toContain("chzzkChannelId=remote-chan");
+      // No fetch triggered by applying a remote state -- it's a pure push.
+      expect(meHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it("a remote LOGIN_REQUIRED state switches the page back to the logged-out UI", async () => {
+      const wrapper = await mountWithChzzkMe({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      });
+      expect(urlInputValue(wrapper)).toContain("chzzkChannelId=chan-1");
+
+      authBroadcastDeps().onRemoteState({ status: "LOGIN_REQUIRED" });
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.text()).toContain("치지직 로그인");
+      expect(urlInputValue(wrapper)).not.toContain("chzzkChannelId");
+    });
+
+    it("the poll re-checks /api/chzzk/me on a later tick and publishes what it resolved", async () => {
+      let meResponse: unknown = {
+        status: "ERROR",
+        code: "NOT_LOGGED_IN",
+        error: "not logged in",
+      };
+      registerEndpoint("/api/chzzk/me", () => meResponse);
+      registerEndpoint("/api/chzzk/auth/refresh", () => ({ status: "OK" }));
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const wrapper = await mountSuspended(IndexPage);
+      await flushPromises();
+
+      expect(wrapper.text()).toContain("치지직 로그인");
+
+      meResponse = {
+        status: "OK",
+        channelId: "chan-poll",
+        channelName: "Polled Channel",
+      };
+      await pollCheckChzzkAuth();
+      await flushPromises();
+      consoleError.mockRestore();
+
+      expect(wrapper.text()).toContain(
+        "현재 로그인한 치지직 채널: Polled Channel",
+      );
+      expect(authBroadcast().publish).toHaveBeenCalledWith({
+        status: "AUTHENTICATED",
+        channelId: "chan-poll",
+        channelName: "Polled Channel",
+      });
+    });
+
+    it("a later check does not overwrite chzzkChannelId once it has been populated, but the first check still populates it", async () => {
+      let meResponse: unknown = {
+        status: "OK",
+        channelId: "chan-first",
+        channelName: "First Channel",
+      };
+      registerEndpoint("/api/chzzk/me", () => meResponse);
+      registerEndpoint("/api/chzzk/auth/refresh", () => ({ status: "OK" }));
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const wrapper = await mountSuspended(IndexPage);
+      await flushPromises();
+
+      expect(urlInputValue(wrapper)).toContain("chzzkChannelId=chan-first");
+
+      meResponse = {
+        status: "OK",
+        channelId: "chan-second",
+        channelName: "Second Channel",
+      };
+      await pollCheckChzzkAuth();
+      await flushPromises();
+      consoleError.mockRestore();
+
+      // The displayed identity follows the latest check...
+      expect(wrapper.text()).toContain(
+        "현재 로그인한 치지직 채널: Second Channel",
+      );
+      // ...but the URL's chzzkChannelId, once populated, is never clobbered
+      // by a later check.
+      expect(urlInputValue(wrapper)).toContain("chzzkChannelId=chan-first");
+      expect(urlInputValue(wrapper)).not.toContain("chan-second");
+    });
+
+    it("a thrown /api/chzzk/me on a later poll tick leaves the logged-in state untouched and publishes nothing", async () => {
+      const wrapper = await mountWithChzzkMe({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      });
+      authBroadcast().publish.mockClear();
+
+      registerEndpoint("/api/chzzk/me", () => {
+        throw new Error("network down");
+      });
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      await pollCheckChzzkAuth();
+      await flushPromises();
+      consoleError.mockRestore();
+
+      expect(wrapper.text()).toContain("현재 로그인한 치지직 채널: My Channel");
+      expect(urlInputValue(wrapper)).toContain("chzzkChannelId=chan-1");
+      expect(authBroadcast().publish).not.toHaveBeenCalled();
+    });
+
+    it("the refresh keep-alive fires once total, not on every poll tick", async () => {
+      const refreshHandler = vi.fn(() => ({ status: "OK" }));
+      let meResponse: unknown = {
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      };
+      registerEndpoint("/api/chzzk/me", () => meResponse);
+      registerEndpoint("/api/chzzk/auth/refresh", refreshHandler);
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const wrapper = await mountSuspended(IndexPage);
+      await flushPromises();
+
+      expect(refreshHandler).toHaveBeenCalledTimes(1);
+
+      meResponse = {
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel Renamed",
+      };
+      await pollCheckChzzkAuth();
+      await flushPromises();
+      consoleError.mockRestore();
+
+      expect(wrapper.text()).toContain(
+        "현재 로그인한 치지직 채널: My Channel Renamed",
+      );
+      expect(refreshHandler).toHaveBeenCalledTimes(1);
+    });
+
+    it("logoutFromChzzk publishes LOGIN_REQUIRED so other tabs drop their session immediately", async () => {
+      const wrapper = await mountWithChzzkMe({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      });
+      registerEndpoint("/api/chzzk/auth/logout", () => ({ status: "OK" }));
+
+      await wrapper.find(".link").trigger("click");
+      await flushPromises();
+
+      expect(authBroadcast().publish).toHaveBeenCalledWith({
+        status: "LOGIN_REQUIRED",
+      });
+    });
+
+    it("closes the auth broadcast channel on unmount", async () => {
+      const wrapper = await mountIndexPage();
+
+      wrapper.unmount();
+
+      expect(authBroadcast().close).toHaveBeenCalledTimes(1);
+    });
+
+    it("a rejected /api/chzzk/auth/refresh keep-alive does not undo a successful identity check, and does not wedge the poll", async () => {
+      const meHandler = vi.fn(() => ({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      }));
+      registerEndpoint("/api/chzzk/me", meHandler);
+      registerEndpoint("/api/chzzk/auth/refresh", () => {
+        throw new Error("network down");
+      });
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const wrapper = await mountSuspended(IndexPage);
+      await flushPromises();
+
+      // The refresh keep-alive rejected, but that must not undo the
+      // already-successful identity check.
+      expect(wrapper.text()).toContain("현재 로그인한 치지직 채널: My Channel");
+      expect(meHandler).toHaveBeenCalledTimes(1);
+
+      // The rejection must not wedge the poll -- a later tick still runs to
+      // completion (i.e. the returned promise settles rather than hanging or
+      // rejecting) and re-checks /api/chzzk/me.
+      await expect(pollCheckChzzkAuth()).resolves.toBeUndefined();
+      await flushPromises();
+      consoleError.mockRestore();
+
+      expect(meHandler).toHaveBeenCalledTimes(2);
+      expect(wrapper.text()).toContain("현재 로그인한 치지직 채널: My Channel");
+    });
+
+    it("the createChannel factory passed to createChzzkAuthBroadcast constructs a real BroadcastChannel with the given name", async () => {
+      const wrapper = await mountIndexPage();
+      broadcastChannelMock.mockClear();
+
+      const channel = authBroadcastDeps().createChannel("some-channel-name");
+
+      expect(broadcastChannelMock).toHaveBeenCalledWith("some-channel-name");
+      expect(channel).toBeDefined();
+      void wrapper;
     });
   });
 });

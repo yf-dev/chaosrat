@@ -156,6 +156,12 @@ export function createChzzkConnection(
   let socket: ChzzkSocket | undefined;
   let sessionKey: string | undefined;
   let failureCount = 0;
+  // Whether the connection is currently idling on the slow auth-recheck
+  // cadence (set alongside every deps.onAuthRequired(true) call, cleared
+  // alongside every deps.onAuthRequired(false) call). This is what
+  // notifyAuthChanged() consults to decide whether a cross-tab "you just
+  // logged in" signal has anything to act on.
+  let parkedOnAuth = false;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let tokenRefreshTimer: ReturnType<typeof setInterval> | undefined;
   let watchdogTimer: ReturnType<typeof setInterval> | undefined;
@@ -302,6 +308,12 @@ export function createChzzkConnection(
     // attempt left behind before fetching a (necessarily new) session URL.
     closeSocket();
     sessionKey = undefined;
+    // Any new attempt means we're no longer idle on the auth-recheck cadence
+    // -- even if this very attempt turns out UNAUTHORIZED again, in which
+    // case the branch below re-sets this to true. Clearing it here (rather
+    // than only where onAuthRequired(false) is called) keeps the flag
+    // accurate even when this attempt fails with a plain, non-auth ERROR.
+    parkedOnAuth = false;
 
     let result = await safeFetchSessionUrl();
     if (!running || gen !== generation) return;
@@ -329,6 +341,7 @@ export function createChzzkConnection(
       // OK: this is an auth problem, not a transient one. Re-check on the
       // slower auth cadence instead of hammering the session quota.
       deps.onAuthRequired(true);
+      parkedOnAuth = true;
       scheduleRetry(authRecheckInterval);
       return;
     }
@@ -395,6 +408,7 @@ export function createChzzkConnection(
         closeSocket();
         sessionKey = undefined;
         deps.onAuthRequired(true);
+        parkedOnAuth = true;
         scheduleRetry(authRecheckInterval);
       } else if (
         message.type === "unsubscribed" &&
@@ -537,10 +551,32 @@ export function createChzzkConnection(
     }
   }
 
+  // Cross-tab push signal: another tab observed that the user just logged
+  // in. A leader parked on the slow auth-recheck cadence has nothing to lose
+  // by retrying immediately -- that cadence is deliberately slow only to
+  // avoid hammering the session quota while there is nothing better to do
+  // (logged out), and a fresh login is exactly the event that removes the
+  // reason to keep waiting. It is therefore safe to skip the remaining
+  // *wait*. It is not safe to touch the exponential *backoff* schedule that
+  // follows an ordinary socket/network failure -- that backoff protects the
+  // same quota against a different problem (a flaky connection, not an
+  // absent login) and this signal has nothing to say about it. Hence this is
+  // a no-op in every state except "currently idling on the auth cadence".
+  function notifyAuthChanged() {
+    if (!running || !parkedOnAuth) return;
+    clearRetryTimer();
+    // An external auth change is not a socket failure and must not consume
+    // the backoff schedule: the next *real* failure should still start from
+    // the base delay, not from wherever failureCount happened to be left.
+    failureCount = 0;
+    void connectCycle();
+  }
+
   function start() {
     if (running) return;
     running = true;
     failureCount = 0;
+    parkedOnAuth = false;
     armTokenRefreshTimer();
     armWatchdogTimer();
     void connectCycle();
@@ -554,6 +590,7 @@ export function createChzzkConnection(
     clearTokenRefreshTimer();
     clearWatchdogTimer();
     lastChatChannelId = undefined;
+    parkedOnAuth = false;
     const keyToUnsubscribe = sessionKey;
     sessionKey = undefined;
     if (keyToUnsubscribe) {
@@ -570,5 +607,5 @@ export function createChzzkConnection(
     return running;
   }
 
-  return { start, stop, isRunning };
+  return { start, stop, isRunning, notifyAuthChanged };
 }

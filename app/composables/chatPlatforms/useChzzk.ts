@@ -1,4 +1,5 @@
 import { useTimeoutPoll } from "@vueuse/core";
+import { BroadcastChannel } from "broadcast-channel";
 import io from "socket.io-client";
 import type {
   ApiError,
@@ -16,6 +17,10 @@ import {
   type ChzzkChatSessionMessage,
   type ChzzkSessionMessageData,
 } from "~/lib/chzzkConnection";
+import {
+  createChzzkAuthBroadcast,
+  type ChzzkAuthState,
+} from "~/lib/chzzkAuthBroadcast";
 import { toLiveSignal, toSubscriptionHealth } from "~/lib/chzzkSignals";
 import { useSharedConnection } from "../useSharedConnection";
 
@@ -118,6 +123,7 @@ export function useChzzk(options: {
     refreshToken: async () => {
       const result = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
         method: "POST",
+        timeout: 5000,
       });
       return result.status === "OK";
     },
@@ -318,6 +324,14 @@ export function useChzzk(options: {
     },
   ));
 
+  // Cross-tab push for CHZZK auth state (see lib/chzzkAuthBroadcast.ts) --
+  // lets a tab that just noticed a login/logout push it to every other tab
+  // immediately, instead of every tab waiting up to 60s for its own poll.
+  const authBroadcast = createChzzkAuthBroadcast({
+    createChannel: (name) => new BroadcastChannel(name),
+    onRemoteState: (state) => applyAuthState(state),
+  });
+
   function showLoginError() {
     if (errors.value.find((error) => error.id === "chzzk-login")) {
       return;
@@ -366,6 +380,11 @@ export function useChzzk(options: {
           await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout", {
             method: "POST",
           });
+          // Best-effort: tell other tabs the login is gone before reloading,
+          // so they don't sit on a stale logged-in state for up to a minute.
+          // The reload immediately below may cut the postMessage short --
+          // that's fine, each tab's own poll or onAuthRequired self-corrects.
+          authBroadcast.publish({ status: "LOGIN_REQUIRED" });
           window.location.reload();
         } catch (e) {
           console.error("Failed to logout from Chzzk:", e);
@@ -380,32 +399,30 @@ export function useChzzk(options: {
     );
   }
 
-  async function checkAuth() {
-    if (!chatOptions.value.chzzkChannelId) {
-      hideLoginError();
-      hideCcidMismatchError();
-      return;
-    }
-
-    async function checkMe() {
+  // Resolves the current auth state via the network, without touching any
+  // UI state -- applyAuthState() below is what maps a state onto this tab's
+  // errors. Keeps the original retry sequence verbatim: try /api/chzzk/me;
+  // on failure refresh once; retry /api/chzzk/me; only then conclude
+  // LOGIN_REQUIRED.
+  async function resolveAuthState(): Promise<ChzzkAuthState> {
+    async function checkMe(): Promise<ChzzkAuthState | undefined> {
       const response = await $fetch<ChzzkMeResponse | ApiError>(
         "/api/chzzk/me",
+        { timeout: 5000 },
       );
       if (response.status === "OK") {
-        if (response.channelId !== chatOptions.value.chzzkChannelId) {
-          hideLoginError();
-          showCcidMismatchError();
-        } else {
-          hideCcidMismatchError();
-          hideLoginError();
-        }
-        return true;
+        return {
+          status: "AUTHENTICATED",
+          channelId: response.channelId,
+          channelName: response.channelName,
+        };
       }
-      return false;
+      return undefined;
     }
 
     try {
-      if (await checkMe()) return;
+      const state = await checkMe();
+      if (state) return state;
     } catch {
       // First attempt failed, try refreshing token
     }
@@ -413,13 +430,56 @@ export function useChzzk(options: {
     try {
       await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
         method: "POST",
+        timeout: 5000,
       });
-      if (await checkMe()) return;
+      const state = await checkMe();
+      if (state) return state;
     } catch {
       // Refresh failed
     }
 
-    showLoginError();
+    return { status: "LOGIN_REQUIRED" };
+  }
+
+  // Maps an auth state (resolved locally or pushed in from another tab via
+  // authBroadcast) onto this tab's error UI. Applied identically regardless
+  // of source: each tab compares against its own chzzkChannelId, since two
+  // tabs can be configured for different channels while sharing one login.
+  function applyAuthState(state: ChzzkAuthState) {
+    if (!chatOptions.value.chzzkChannelId) {
+      hideLoginError();
+      hideCcidMismatchError();
+      return;
+    }
+
+    if (state.status === "AUTHENTICATED") {
+      // No-op unless this tab's connection is a leader currently parked on
+      // the slow 30s auth-recheck cadence -- see notifyAuthChanged() in
+      // lib/chzzkConnection.ts.
+      connection.notifyAuthChanged();
+      if (state.channelId !== chatOptions.value.chzzkChannelId) {
+        hideLoginError();
+        showCcidMismatchError();
+      } else {
+        hideCcidMismatchError();
+        hideLoginError();
+      }
+    } else {
+      hideCcidMismatchError();
+      showLoginError();
+    }
+  }
+
+  async function checkAuth() {
+    if (!chatOptions.value.chzzkChannelId) {
+      hideLoginError();
+      hideCcidMismatchError();
+      return;
+    }
+
+    const state = await resolveAuthState();
+    applyAuthState(state);
+    authBroadcast.publish(state);
   }
 
   useTimeoutPoll(checkAuth, 60_000, { immediate: true });
@@ -433,6 +493,7 @@ export function useChzzk(options: {
 
   onScopeDispose(() => {
     void connection.stop();
+    void authBroadcast.close();
   });
 
   function clearChat() {

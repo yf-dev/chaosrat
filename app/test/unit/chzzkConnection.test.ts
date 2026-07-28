@@ -1535,4 +1535,178 @@ describe("createChzzkConnection", () => {
 
     await conn.stop();
   });
+
+  // notifyAuthChanged(): a cross-tab push signal that another tab just
+  // observed a successful login. It must skip the *wait* of the slow
+  // auth-recheck cadence, but only in that exact state -- it must never
+  // touch a healthy socket and must never short-circuit the exponential
+  // backoff that protects the session quota after an ordinary
+  // socket/network failure.
+
+  it("50. notifyAuthChanged() while parked on the auth-recheck cadence (UNAUTHORIZED) retries immediately, without advancing the clock", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "UNAUTHORIZED" });
+    h.refreshToken.mockResolvedValue(false);
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.onAuthRequired).toHaveBeenLastCalledWith(true);
+    const callsBefore = h.fetchSessionUrl.mock.calls.length;
+
+    h.fetchSessionUrl.mockResolvedValueOnce({
+      status: "OK",
+      url: "wss://after-login",
+    });
+    conn.notifyAuthChanged();
+    // No timer advance at all -- the whole point is that this does not wait
+    // out the remainder of the authRecheckInterval.
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore + 1);
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+    expect(h.createSocket.mock.calls[0][0]).toBe("wss://after-login");
+    expect(h.onAuthRequired).toHaveBeenLastCalledWith(false);
+
+    await conn.stop();
+  });
+
+  it("51. notifyAuthChanged() while parked after a SYSTEM revoked message retries immediately", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onMessage("SYSTEM", revokedMessage());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.onAuthRequired).toHaveBeenLastCalledWith(true);
+    const callsBefore = h.fetchSessionUrl.mock.calls.length;
+
+    h.fetchSessionUrl.mockResolvedValueOnce({
+      status: "OK",
+      url: "wss://after-relogin",
+    });
+    conn.notifyAuthChanged();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore + 1);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    expect(h.createSocket.mock.calls[1][0]).toBe("wss://after-relogin");
+
+    await conn.stop();
+  });
+
+  it("52. notifyAuthChanged() while the socket is healthy/connected does nothing", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    const socket = h.latestSocket();
+    const callsBefore = h.fetchSessionUrl.mock.calls.length;
+
+    conn.notifyAuthChanged();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore);
+    expect(socket.close).not.toHaveBeenCalled();
+    expect(h.createSocket).toHaveBeenCalledTimes(1);
+
+    await conn.stop();
+  });
+
+  it("53. notifyAuthChanged() while parked on an ordinary socket-failure backoff does nothing to that schedule", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onError(new Error("connect_error"));
+
+    const callsBefore = h.fetchSessionUrl.mock.calls.length;
+    conn.notifyAuthChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    // No immediate retry: this is an ordinary backoff wait, not an
+    // auth-recheck park, so notifyAuthChanged() must be a no-op here.
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore);
+
+    // The original backoff schedule still governs untouched: nothing before
+    // retryBaseDelay, exactly one attempt at retryBaseDelay.
+    await vi.advanceTimersByTimeAsync(timings.retryBaseDelay - 1);
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsBefore + 1);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    await conn.stop();
+  });
+
+  it("54. notifyAuthChanged() before start() or after stop() does nothing", async () => {
+    const h = createHarness();
+    h.fetchSessionUrl.mockResolvedValue({ status: "OK", url: "wss://a" });
+    const conn = createChzzkConnection(h.deps, timings);
+
+    conn.notifyAuthChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.fetchSessionUrl).not.toHaveBeenCalled();
+
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await conn.stop();
+
+    const callsAfterStop = h.fetchSessionUrl.mock.calls.length;
+    conn.notifyAuthChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.fetchSessionUrl.mock.calls.length).toBe(callsAfterStop);
+  });
+
+  it("55. notifyAuthChanged() resets failureCount so a later real socket failure retries at the base delay, not a stale doubled one", async () => {
+    const h = createHarness();
+    const conn = createChzzkConnection(h.deps, timings);
+
+    // A real socket failure first, to accumulate failureCount to 1.
+    h.fetchSessionUrl.mockResolvedValueOnce({
+      status: "OK",
+      url: "wss://first",
+    });
+    conn.start();
+    await vi.advanceTimersByTimeAsync(0);
+    h.latestSocket().handlers.onError(new Error("connect_error"));
+
+    // Before that (1000ms) backoff fires, the account becomes UNAUTHORIZED,
+    // so the next attempt parks on the auth-recheck cadence instead, with a
+    // leftover failureCount from the earlier failure.
+    h.fetchSessionUrl.mockResolvedValue({ status: "UNAUTHORIZED" });
+    h.refreshToken.mockResolvedValue(false);
+    await vi.advanceTimersByTimeAsync(timings.retryBaseDelay);
+    expect(h.onAuthRequired).toHaveBeenLastCalledWith(true);
+
+    // Auth changes: notifyAuthChanged() reconnects immediately and must
+    // reset failureCount to 0 (an external auth change is not a socket
+    // failure).
+    h.fetchSessionUrl.mockResolvedValueOnce({
+      status: "OK",
+      url: "wss://second",
+    });
+    conn.notifyAuthChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+
+    // A fresh real failure now must retry at the base delay (not doubled),
+    // proving failureCount was reset rather than carried over.
+    h.fetchSessionUrl.mockResolvedValueOnce({
+      status: "OK",
+      url: "wss://third",
+    });
+    h.latestSocket().handlers.onError(new Error("connect_error again"));
+    await vi.advanceTimersByTimeAsync(timings.retryBaseDelay - 1);
+    expect(h.createSocket).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(h.createSocket).toHaveBeenCalledTimes(3);
+
+    await conn.stop();
+  });
 });
