@@ -160,6 +160,119 @@ describe("server/api/chzzk/auth/refresh", () => {
     }
   });
 
+  it("serves the cached rotated pair (no second upstream exchange) to a straggler that replays the pre-rotation cookie more than 60s but less than 10 minutes later, and still writes cookies for it", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn().mockResolvedValue({
+        code: 200,
+        message: null,
+        content: {
+          accessToken: "new-at",
+          refreshToken: "new-rt",
+          tokenType: "Bearer",
+          expiresIn: 3600,
+          scope: "chat",
+        },
+      });
+      globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+      const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+
+      const call1 = createMockEvent({
+        url: "/api/chzzk/auth/refresh",
+        method: "POST",
+        headers: { cookie: "chzzk_refresh_token=rt-straggler" },
+      });
+      const result1 = await handler(call1.event);
+      expect(result1).toEqual({ status: "OK" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      // A second OBS Browser Source with its own cookie jar, still holding
+      // the now-spent refresh token, replays it well past the old 60s window
+      // but inside the widened 10-minute one.
+      await vi.advanceTimersByTimeAsync(90_000);
+
+      const call2 = createMockEvent({
+        url: "/api/chzzk/auth/refresh",
+        method: "POST",
+        headers: { cookie: "chzzk_refresh_token=rt-straggler" },
+      });
+      const result2 = await handler(call2.event);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result2).toEqual({ status: "OK" });
+
+      const setCookieHeader = call2.getResponseHeader("set-cookie") as
+        string[] | undefined;
+      expect(setCookieHeader).toBeDefined();
+      expect(
+        setCookieHeader!.some((c) => c.startsWith("chzzk_access_token=new-at")),
+      ).toBe(true);
+      expect(
+        setCookieHeader!.some((c) =>
+          c.startsWith("chzzk_refresh_token=new-rt"),
+        ),
+      ).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("performs a fresh upstream exchange once the 10-minute cache window has elapsed", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({
+          code: 200,
+          message: null,
+          content: {
+            accessToken: "first-at",
+            refreshToken: "first-rt",
+            tokenType: "Bearer",
+            expiresIn: 3600,
+            scope: "chat",
+          },
+        })
+        .mockResolvedValueOnce({
+          code: 200,
+          message: null,
+          content: {
+            accessToken: "second-at",
+            refreshToken: "second-rt",
+            tokenType: "Bearer",
+            expiresIn: 3600,
+            scope: "chat",
+          },
+        });
+      globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+
+      const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+
+      const call1 = createMockEvent({
+        url: "/api/chzzk/auth/refresh",
+        method: "POST",
+        headers: { cookie: "chzzk_refresh_token=rt-stale" },
+      });
+      await handler(call1.event);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(10 * 60_000 + 1);
+
+      const call2 = createMockEvent({
+        url: "/api/chzzk/auth/refresh",
+        method: "POST",
+        headers: { cookie: "chzzk_refresh_token=rt-stale" },
+      });
+      const result2 = await handler(call2.event);
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result2).toEqual({ status: "OK" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not collapse requests carrying distinct refresh tokens", async () => {
     const fetchMock = vi
       .fn()

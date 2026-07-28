@@ -329,7 +329,7 @@ export function useChzzk(options: {
   // immediately, instead of every tab waiting up to 60s for its own poll.
   const authBroadcast = createChzzkAuthBroadcast({
     createChannel: (name) => new BroadcastChannel(name),
-    onRemoteState: (state) => applyAuthState(state),
+    onRemoteState: (state) => void handleRemoteAuthState(state),
   });
 
   function showLoginError() {
@@ -468,6 +468,39 @@ export function useChzzk(options: {
       hideCcidMismatchError();
       showLoginError();
     }
+  }
+
+  // A state pushed in from another tab via authBroadcast is trusted
+  // asymmetrically, unlike a locally resolved state: AUTHENTICATED is good
+  // news that costs nothing to apply and self-corrects on the next poll (or
+  // via onAuthRequired) if it was ever wrong, so it's applied immediately.
+  // LOGIN_REQUIRED is bad news -- showing it wrongly flashes a login error
+  // onto every tab sharing this browser, including OBS Browser Sources on a
+  // live overlay -- so it is verified locally first, via the same
+  // me -> refresh -> me sequence checkAuth uses, before being applied.
+  // Deliberately does NOT go through authBroadcast.publish(): a genuine
+  // logout would otherwise make every tab publish its own verified state,
+  // which would make every other tab verify again in turn -- O(N^2)
+  // verifications and refresh attempts against a single-use refresh token.
+  // Only checkAuth (the 60s poll and the channel-id watcher) publishes.
+  async function handleRemoteAuthState(state: ChzzkAuthState) {
+    if (state.status === "AUTHENTICATED") {
+      applyAuthState(state);
+      return;
+    }
+    // A tab with no chzzkChannelId configured (e.g. Twitch-only) still
+    // constructs this broadcast and still receives every message on it --
+    // CHZZK auth is channel-id-independent, see createChzzkAuthBroadcast's
+    // comment above -- but has nothing to verify. Without this guard,
+    // resolveAuthState() would run its full me -> refresh -> me sequence
+    // (spending a single-use refresh-token rotation) only to have
+    // applyAuthState discard the result via its own early exit. Mirror
+    // checkAuth's guard here instead, before touching the network at all.
+    if (!chatOptions.value.chzzkChannelId) {
+      applyAuthState(state);
+      return;
+    }
+    applyAuthState(await resolveAuthState());
   }
 
   async function checkAuth() {

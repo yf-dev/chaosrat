@@ -38,11 +38,15 @@ import type {
 //
 // `$fetch("/api/chzzk/me")` (called unconditionally in `onMounted`) is
 // stubbed with `registerEndpoint` to return a non-OK `ApiError`, so the page
-// settles with `chzzkChannelId` empty and never touches a real network call.
-// The chzzk login/logout flow itself, and chzzkChannelId's own contribution
-// to the URL (which the template only ever sets via that fetch response,
-// never via a direct input), are out of scope for a URL-builder test focused
-// on the fields the user actually types into.
+// settles with `chzzkChannelId` empty. A non-OK `/api/chzzk/me` now also
+// triggers one recovery `/api/chzzk/auth/refresh` + retry (see
+// `resolveChzzkAuthState` in pages/index.vue), so `/api/chzzk/auth/refresh`
+// is stubbed here too -- otherwise that recovery attempt would hit a real,
+// unmocked route in every test that mounts through this helper. The chzzk
+// login/logout flow itself, and chzzkChannelId's own contribution to the URL
+// (which the template only ever sets via that fetch response, never via a
+// direct input), are out of scope for a URL-builder test focused on the
+// fields the user actually types into.
 
 // `useTimeoutPoll` is mocked the same way `test/nuxt/useChzzk.test.ts` mocks
 // it: capture the polled callback via `useTimeoutPollMock` instead of letting
@@ -99,6 +103,27 @@ function authBroadcast(): {
 function pollCheckChzzkAuth(): Promise<void> {
   const calls = useTimeoutPollMock.mock.calls;
   return calls[calls.length - 1][0]();
+}
+
+// A single `flushPromises()` (one macrotask tick) is enough to observe the
+// result of a *single* awaited `$fetch` against @nuxt/test-utils'
+// `registerEndpoint` mock -- every pre-existing test above relies on exactly
+// that. The recovery/verification sequence (`/api/chzzk/me` ->
+// `/api/chzzk/auth/refresh` -> retry `/api/chzzk/me`) chains multiple such
+// calls sequentially before resolving, and how many ticks that needs to fully
+// settle is not a fixed small number -- it empirically varies with what else
+// is mid-flight (e.g. a mount's own trailing keep-alive refresh still
+// settling). Loop generously rather than pin an exact count: each extra tick
+// past the point everything has already settled is a near-free no-op
+// `setTimeout(0)`, whereas under-flushing leaves a hop still in flight when
+// assertions run, which doesn't just fail *this* test -- the dangling
+// promise resolves during whatever runs next and corrupts a later test's
+// call counts instead. Use this wherever a test drives that chain to
+// completion, instead of a bare `flushPromises()`.
+async function flushChzzkRecoveryChain(): Promise<void> {
+  for (let i = 0; i < 20; i++) {
+    await flushPromises();
+  }
 }
 
 // `~/lib/chzzkAuthBroadcast` is mocked wholesale above, so the real
@@ -173,9 +198,14 @@ async function mountIndexPage() {
     code: "NOT_LOGGED_IN",
     error: "not logged in",
   }));
+  registerEndpoint("/api/chzzk/auth/refresh", () => ({
+    status: "ERROR",
+    code: "internal_server_error",
+    error: "boom",
+  }));
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   const wrapper = await mountSuspended(IndexPage);
-  await flushPromises();
+  await flushChzzkRecoveryChain();
   consoleError.mockRestore();
   return wrapper;
 }
@@ -192,7 +222,12 @@ async function mountWithChzzkMe(
   registerEndpoint("/api/chzzk/auth/refresh", () => refreshResponse);
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
   const wrapper = await mountSuspended(IndexPage);
-  await flushPromises();
+  // Fully settles mount's own me -> keep-alive-refresh chain before handing
+  // control back, so a test that immediately re-registers endpoints and
+  // drives a second chain right after (e.g. simulating a remote broadcast)
+  // never races a still-in-flight request from this initial mount -- see
+  // flushChzzkRecoveryChain's comment.
+  await flushChzzkRecoveryChain();
   consoleError.mockRestore();
   return wrapper;
 }
@@ -553,15 +588,25 @@ describe("pages/index.vue", () => {
         error: "not logged in",
       }));
       registerEndpoint("/api/chzzk/me", meHandler);
+      // The initial /api/chzzk/me failure now also drives one recovery
+      // refresh + retry (see resolveChzzkAuthState) -- register it too, so
+      // the mount settles into LOGIN_REQUIRED cleanly instead of leaving a
+      // dangling fetch against an unmocked route.
+      registerEndpoint("/api/chzzk/auth/refresh", () => ({
+        status: "ERROR",
+        code: "internal_server_error",
+        error: "boom",
+      }));
       const consoleError = vi
         .spyOn(console, "error")
         .mockImplementation(() => {});
       const wrapper = await mountSuspended(IndexPage);
-      await flushPromises();
+      await flushChzzkRecoveryChain();
       consoleError.mockRestore();
 
       expect(wrapper.text()).toContain("치지직 로그인");
-      expect(meHandler).toHaveBeenCalledTimes(1);
+      // 2, not 1: the first call fails, triggering the recovery retry above.
+      expect(meHandler).toHaveBeenCalledTimes(2);
 
       authBroadcastDeps().onRemoteState({
         status: "AUTHENTICATED",
@@ -574,11 +619,12 @@ describe("pages/index.vue", () => {
         "현재 로그인한 치지직 채널: Remote Channel",
       );
       expect(urlInputValue(wrapper)).toContain("chzzkChannelId=remote-chan");
-      // No fetch triggered by applying a remote state -- it's a pure push.
-      expect(meHandler).toHaveBeenCalledTimes(1);
+      // Still 2, not 3: no fetch is triggered by applying a remote state --
+      // it's a pure push.
+      expect(meHandler).toHaveBeenCalledTimes(2);
     });
 
-    it("a remote LOGIN_REQUIRED state switches the page back to the logged-out UI", async () => {
+    it("a remote LOGIN_REQUIRED state, once this tab's own verification also confirms it, switches the page back to the logged-out UI", async () => {
       const wrapper = await mountWithChzzkMe({
         status: "OK",
         channelId: "chan-1",
@@ -586,8 +632,31 @@ describe("pages/index.vue", () => {
       });
       expect(urlInputValue(wrapper)).toContain("chzzkChannelId=chan-1");
 
+      // A remote LOGIN_REQUIRED is no longer trusted blindly (see the
+      // dedicated describe block below) -- it triggers this tab's own
+      // verification, which must also come back non-OK for the page to
+      // actually log out.
+      registerEndpoint("/api/chzzk/me", () => ({
+        status: "ERROR",
+        code: "NOT_LOGGED_IN",
+        error: "not logged in",
+      }));
+      registerEndpoint("/api/chzzk/auth/refresh", () => ({
+        status: "ERROR",
+        code: "internal_server_error",
+        error: "boom",
+      }));
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
       authBroadcastDeps().onRemoteState({ status: "LOGIN_REQUIRED" });
-      await wrapper.vm.$nextTick();
+      // Verification is a real async /api/chzzk/me (+ refresh + retry) round
+      // trip, not just a synchronous state update -- see
+      // flushChzzkRecoveryChain's comment for why a bare flushPromises()
+      // isn't enough here.
+      await flushChzzkRecoveryChain();
+      consoleError.mockRestore();
 
       expect(wrapper.text()).toContain("치지직 로그인");
       expect(urlInputValue(wrapper)).not.toContain("chzzkChannelId");
@@ -605,7 +674,12 @@ describe("pages/index.vue", () => {
         .spyOn(console, "error")
         .mockImplementation(() => {});
       const wrapper = await mountSuspended(IndexPage);
-      await flushPromises();
+      // The initial ERROR response drives a full recovery chain (me ->
+      // refresh -> retry me, itself still ERROR at this point) -- let it
+      // fully settle before reassigning meResponse below, or the recovery
+      // retry could race past the reassignment and read the *second* tick's
+      // value instead of its own.
+      await flushChzzkRecoveryChain();
 
       expect(wrapper.text()).toContain("치지직 로그인");
 
@@ -783,6 +857,243 @@ describe("pages/index.vue", () => {
       expect(broadcastChannelMock).toHaveBeenCalledWith("some-channel-name");
       expect(channel).toBeDefined();
       void wrapper;
+    });
+  });
+
+  // Closes the bug where this page trusted a single "not logged in" /api/
+  // chzzk/me envelope as proof of logout. The access-token cookie's maxAge is
+  // the token's 1-day expiresIn (server/api/chzzk/auth/callback.ts,
+  // server/api/chzzk/auth/refresh.ts) while the refresh-token cookie lasts 30
+  // days, so a day after last use /api/chzzk/me legitimately returns
+  // not_logged_in even though a refresh would still succeed. These tests pin
+  // the recovery sequence this page now shares with useChzzk.ts's
+  // resolveAuthState: try /api/chzzk/me, and only on a non-OK envelope (not a
+  // thrown fetch, which is covered above) POST /api/chzzk/auth/refresh once
+  // and retry /api/chzzk/me before concluding LOGIN_REQUIRED.
+  describe("chzzk auth: recovery via refresh when /api/chzzk/me first fails", () => {
+    it("not_logged_in followed by a successful refresh and a successful retry ends AUTHENTICATED, publishing AUTHENTICATED", async () => {
+      let meCallCount = 0;
+      const meHandler = vi.fn(() => {
+        meCallCount += 1;
+        if (meCallCount === 1) {
+          return {
+            status: "ERROR",
+            code: "NOT_LOGGED_IN",
+            error: "not logged in",
+          };
+        }
+        return {
+          status: "OK",
+          channelId: "chan-recovered",
+          channelName: "Recovered Channel",
+        };
+      });
+      registerEndpoint("/api/chzzk/me", meHandler);
+      const refreshHandler = vi.fn(() => ({ status: "OK" }));
+      registerEndpoint("/api/chzzk/auth/refresh", refreshHandler);
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const wrapper = await mountSuspended(IndexPage);
+      await flushChzzkRecoveryChain();
+      consoleError.mockRestore();
+
+      expect(meHandler).toHaveBeenCalledTimes(2);
+      expect(refreshHandler).toHaveBeenCalledTimes(1);
+      expect(wrapper.text()).toContain(
+        "현재 로그인한 치지직 채널: Recovered Channel",
+      );
+      expect(urlInputValue(wrapper)).toContain("chzzkChannelId=chan-recovered");
+      expect(authBroadcast().publish).toHaveBeenCalledWith({
+        status: "AUTHENTICATED",
+        channelId: "chan-recovered",
+        channelName: "Recovered Channel",
+      });
+    });
+
+    it("not_logged_in whose refresh+retry also fails ends LOGIN_REQUIRED, publishing LOGIN_REQUIRED", async () => {
+      const meHandler = vi.fn(() => ({
+        status: "ERROR",
+        code: "NOT_LOGGED_IN",
+        error: "not logged in",
+      }));
+      registerEndpoint("/api/chzzk/me", meHandler);
+      const refreshHandler = vi.fn(() => ({ status: "OK" }));
+      registerEndpoint("/api/chzzk/auth/refresh", refreshHandler);
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const wrapper = await mountSuspended(IndexPage);
+      await flushChzzkRecoveryChain();
+      consoleError.mockRestore();
+
+      expect(meHandler).toHaveBeenCalledTimes(2);
+      expect(refreshHandler).toHaveBeenCalledTimes(1);
+      expect(wrapper.text()).toContain("치지직 로그인");
+      expect(authBroadcast().publish).toHaveBeenCalledWith({
+        status: "LOGIN_REQUIRED",
+      });
+    });
+
+    it("a refresh call that itself throws also ends LOGIN_REQUIRED rather than wedging, after actually attempting the refresh", async () => {
+      const meHandler = vi.fn(() => ({
+        status: "ERROR",
+        code: "NOT_LOGGED_IN",
+        error: "not logged in",
+      }));
+      registerEndpoint("/api/chzzk/me", meHandler);
+      const refreshHandler = vi.fn(() => {
+        throw new Error("network down");
+      });
+      registerEndpoint("/api/chzzk/auth/refresh", refreshHandler);
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      await expect(mountSuspended(IndexPage)).resolves.toBeDefined();
+      await flushChzzkRecoveryChain();
+      consoleError.mockRestore();
+
+      // The recovery path must actually attempt the refresh, not just fall
+      // straight through to LOGIN_REQUIRED on the first non-OK /api/chzzk/me.
+      expect(refreshHandler).toHaveBeenCalledTimes(1);
+      // Refresh itself threw, so the retry /api/chzzk/me is never attempted.
+      expect(meHandler).toHaveBeenCalledTimes(1);
+      expect(authBroadcast().publish).toHaveBeenCalledWith({
+        status: "LOGIN_REQUIRED",
+      });
+    });
+  });
+
+  // Closes the second half of the same bug: this page broadcast every
+  // resolved state -- including a wrongly-concluded LOGIN_REQUIRED -- to every
+  // other open tab. In this app the other tabs are OBS Browser Sources, so a
+  // false LOGIN_REQUIRED from one tab could flash "치지직 로그인이 필요합니다"
+  // on a live overlay. A remote LOGIN_REQUIRED must now be verified with this
+  // tab's own check (including the refresh-retry above) before being trusted,
+  // and that verification must never itself publish -- otherwise one real
+  // logout would cause every tab to publish, causing every other tab to
+  // verify again, and so on.
+  describe("chzzk auth: a remote LOGIN_REQUIRED is verified locally before being trusted", () => {
+    it("is not trusted blindly: if this tab's own check still succeeds, it stays logged in and publishes nothing", async () => {
+      const wrapper = await mountWithChzzkMe({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      });
+      authBroadcast().publish.mockClear();
+
+      const meHandler = vi.fn(() => ({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      }));
+      registerEndpoint("/api/chzzk/me", meHandler);
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      authBroadcastDeps().onRemoteState({ status: "LOGIN_REQUIRED" });
+      await flushChzzkRecoveryChain();
+      consoleError.mockRestore();
+
+      expect(meHandler).toHaveBeenCalledTimes(1);
+      expect(wrapper.text()).toContain("현재 로그인한 치지직 채널: My Channel");
+      expect(authBroadcast().publish).not.toHaveBeenCalled();
+    });
+
+    it("a thrown /api/chzzk/me during verification leaves the existing state untouched and publishes nothing", async () => {
+      const wrapper = await mountWithChzzkMe({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      });
+      authBroadcast().publish.mockClear();
+
+      // A network/timeout failure on verification's own /api/chzzk/me is not
+      // a definitive answer -- same rule as checkChzzkAuth's own first call
+      // (see the "thrown ... leaves the logged-in state untouched" test
+      // above), just reached via the remote-push path this time.
+      registerEndpoint("/api/chzzk/me", () => {
+        throw new Error("network down");
+      });
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      authBroadcastDeps().onRemoteState({ status: "LOGIN_REQUIRED" });
+      await flushChzzkRecoveryChain();
+      consoleError.mockRestore();
+
+      expect(wrapper.text()).toContain("현재 로그인한 치지직 채널: My Channel");
+      expect(authBroadcast().publish).not.toHaveBeenCalled();
+    });
+
+    it("is confirmed when this tab's own check (refresh + retry included) also fails: ends logged out, still publishing nothing", async () => {
+      const wrapper = await mountWithChzzkMe({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "My Channel",
+      });
+      authBroadcast().publish.mockClear();
+
+      const meHandler = vi.fn(() => ({
+        status: "ERROR",
+        code: "NOT_LOGGED_IN",
+        error: "not logged in",
+      }));
+      registerEndpoint("/api/chzzk/me", meHandler);
+      const refreshHandler = vi.fn(() => ({
+        status: "ERROR",
+        code: "internal_server_error",
+        error: "boom",
+      }));
+      registerEndpoint("/api/chzzk/auth/refresh", refreshHandler);
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      authBroadcastDeps().onRemoteState({ status: "LOGIN_REQUIRED" });
+      await flushChzzkRecoveryChain();
+      consoleError.mockRestore();
+
+      // The remote push must actually have been verified locally -- not just
+      // trusted -- via this tab's own me-then-refresh-then-retry sequence.
+      expect(meHandler).toHaveBeenCalledTimes(2);
+      expect(refreshHandler).toHaveBeenCalledTimes(1);
+      expect(wrapper.text()).toContain("치지직 로그인");
+      // The verification path resolved LOGIN_REQUIRED locally too, but must
+      // still not publish -- only this tab's own poll is allowed to.
+      expect(authBroadcast().publish).not.toHaveBeenCalled();
+    });
+
+    it("a remote AUTHENTICATED is still applied immediately, with no verification network call", async () => {
+      const meHandler = vi.fn(() => ({
+        status: "ERROR",
+        code: "NOT_LOGGED_IN",
+        error: "not logged in",
+      }));
+      registerEndpoint("/api/chzzk/me", meHandler);
+      const consoleError = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const wrapper = await mountSuspended(IndexPage);
+      await flushPromises();
+      consoleError.mockRestore();
+      expect(meHandler).toHaveBeenCalledTimes(1);
+
+      authBroadcastDeps().onRemoteState({
+        status: "AUTHENTICATED",
+        channelId: "remote-chan",
+        channelName: "Remote Channel",
+      });
+      await wrapper.vm.$nextTick();
+
+      expect(wrapper.text()).toContain(
+        "현재 로그인한 치지직 채널: Remote Channel",
+      );
+      // Still no extra network call -- a good-news push is trusted as-is.
+      expect(meHandler).toHaveBeenCalledTimes(1);
     });
   });
 });

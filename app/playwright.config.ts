@@ -30,6 +30,30 @@ export default defineConfig({
     colorScheme: "light",
     locale: "ko-KR",
     timezoneId: "Asia/Seoul",
+    // A single run of builder.spec.ts failed once (the
+    // hiddenUsernameRegex/hiddenMessageRegex round-trip test) and has never
+    // reproduced; the cause remains unknown. `screenshot: "only-on-failure"`
+    // is here so the next occurrence, if it happens, leaves something
+    // behind. Screenshots are free on a green run — they are only taken when
+    // a test fails.
+    //
+    // Tracing was tried and deliberately removed: `retain-on-failure`
+    // records every test and discards the passing ones, measuring ~7 seconds
+    // (~35%) slower across the suite. That cost is too high for a hook that
+    // runs on every commit. Slower test runs also make timing-sensitive tests
+    // *more* flaky, not less. If a trace is genuinely needed, run
+    // `npx playwright test --trace on` for that investigation rather than
+    // paying for it on every commit.
+    //
+    // `retries` stays at 0 on purpose: a retry would let a flake through the
+    // commit gate, which is a policy call for the repo owner rather than
+    // something to change while chasing diagnostics.
+    //
+    // Lesson: the original failure's error text was printed to stdout by the
+    // reporter at the time, but was lost because output was piped through
+    // `tail -3`. When a run fails, do not filter the output — the full error
+    // text is what matters next.
+    screenshot: "only-on-failure",
     // `reducedMotion` is not one of the direct `PlaywrightTestOptions`
     // fields in @playwright/test@1.61.0's types (unlike colorScheme/locale/
     // timezoneId) -- it must go through the `contextOptions` passthrough to

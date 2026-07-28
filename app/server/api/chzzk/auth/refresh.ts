@@ -15,8 +15,24 @@ interface RefreshTokenResult {
 // that cookie value into a single upstream exchange, and lets later callers
 // within cacheMs reuse the same result instead of retrying with an
 // already-invalidated token.
+//
+// cacheMs is 10 minutes rather than the original 60 seconds to cover a
+// straggler: a source that fetched this cookie value some time ago and only
+// gets around to replaying it later. Whether OBS actually gives each Browser
+// Source its own cookie jar (which would let sources rotate independently
+// and leave one holding a spent token) has not been verified from this
+// devcontainer -- if all sources in fact share one jar, this window is
+// simply inert. The cost of widening it: a rotated access/refresh token pair
+// sits in server memory, keyed by the now-spent refresh token, for up to 10
+// minutes instead of 1. A pair served from this cache after a logout/revoke
+// is already-dead by then -- cosmetically wrong (a caller briefly believes
+// it refreshed) but self-correcting on the very next API call, since the
+// dead access token fails and there is no live refresh token left to retry
+// with. That self-correcting failure mode is why 10 minutes is treated as a
+// deliberate stopping point, not a floor -- widen it further only with a
+// concrete reason, not just to shave off more of this hypothetical.
 const refreshFlight = createSingleFlight<RefreshTokenResult>({
-  cacheMs: 60_000,
+  cacheMs: 10 * 60_000,
   inFlightTimeoutMs: 5_000,
 });
 

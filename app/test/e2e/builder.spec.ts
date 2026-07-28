@@ -21,7 +21,26 @@ import { decodeUrlSafeBase64 } from "../../lib/utils";
 // issues, so that call is unreachable from here. See the final report for
 // this limitation.
 
-function chatOverlayUrlValue(page: import("@playwright/test").Page) {
+// `#chatOverlayUrl` is bound to a Vue `computed` (pages/index.vue), and Vue
+// flushes DOM updates on its own microtask, not synchronously with the
+// `@input`/`@change` handler a `.fill()`/`.check()` call triggers.
+// `inputValue()` is a one-shot read -- unlike `expect(locator).toHaveValue()`
+// it does not retry -- so a caller that does
+// `await locator.fill(...); await chatOverlayUrlValue(page)` is reading an
+// asynchronously-updated value with no synchronization back onto it. In
+// practice the CDP round-trip for `inputValue()` is slower than Vue's
+// microtask flush, which is why this has been reliable. The
+// `await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)))`
+// below forces a macrotask hop *inside the page*: Vue's flush is queued as a
+// microtask during the synchronous handler, and all pending microtasks drain
+// before any macrotask (including a `setTimeout(0)`) runs -- so by the time
+// this resolves, the DOM is guaranteed to reflect the latest input. This
+// closes a real race in principle. It was NOT demonstrated to be the cause
+// of the one observed failure of the round-trip test below -- that failure
+// never reproduced despite extensive attempts, and its cause remains
+// unknown.
+async function chatOverlayUrlValue(page: import("@playwright/test").Page) {
+  await page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 0)));
   return page.locator("#chatOverlayUrl").inputValue();
 }
 

@@ -151,8 +151,13 @@ function authBroadcast(): {
   };
 }
 
+// Returns whatever `onRemoteState` returns so a caller that needs to wait for
+// a LOGIN_REQUIRED state's local verification (a real async chain in
+// useChzzk.ts, even though ChzzkAuthBroadcastDeps types onRemoteState as
+// returning void) can `await` it. Awaiting the AUTHENTICATED path, which
+// really is synchronous void, is a harmless no-op.
 function emitRemoteAuthState(state: ChzzkAuthState) {
-  authBroadcastDeps().onRemoteState(state);
+  return authBroadcastDeps().onRemoteState(state);
 }
 
 // `fetchLiveSignal`/`fetchSubscriptionHealth` are declared optional on
@@ -1136,6 +1141,22 @@ describe("useChzzk", () => {
       expect(connection.notifyAuthChanged).not.toHaveBeenCalled();
     });
 
+    it("applies a remote LOGIN_REQUIRED state while chzzkChannelId is unset without ever touching the network", () => {
+      // A tab with no chzzkChannelId configured (e.g. Twitch-only) still
+      // shares the channel-id-independent auth broadcast and still receives
+      // this message, but has nothing of its own to verify -- and must not
+      // spend a single-use refresh-token rotation checking anyway.
+      setUp(); // no chzzkChannelId configured
+      const { errors } = useChzzk({});
+      deps().onAuthRequired(true);
+      expect(errors.value).toHaveLength(1);
+
+      emitRemoteAuthState({ status: "LOGIN_REQUIRED" });
+
+      expect(errors.value).toHaveLength(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
     it("createChannel (dep passed to createChzzkAuthBroadcast) constructs a BroadcastChannel with the given name, without touching a real channel", () => {
       setUp();
       useChzzk({});
@@ -1181,13 +1202,109 @@ describe("useChzzk", () => {
       expect(errors.value.map((e) => e.id)).toEqual(["chzzk-ccid-mismatch"]);
     });
 
-    it("applies a remote LOGIN_REQUIRED state: raises the login error", () => {
+    it("applies a remote AUTHENTICATED state with no network call at all", async () => {
       setUp({ chzzkChannelId: "chan-1" });
+      const { errors } = useChzzk({});
+      deps().onAuthRequired(true);
+      expect(errors.value).toHaveLength(1);
+
+      await emitRemoteAuthState({
+        status: "AUTHENTICATED",
+        channelId: "chan-1",
+        channelName: "name",
+      });
+
+      expect(errors.value).toHaveLength(0);
+      expect(fetchMock).not.toHaveBeenCalled();
+      const connection = capturedConnection.current as {
+        notifyAuthChanged: ReturnType<typeof vi.fn>;
+      };
+      expect(connection.notifyAuthChanged).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not apply a remote LOGIN_REQUIRED state directly -- it verifies locally first via /api/chzzk/me", () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      // Never resolves during this test -- if the remote state were applied
+      // directly (the old, buggy behaviour) the login error would appear
+      // synchronously, before this pending fetch could possibly matter.
+      fetchMock.mockReturnValue(new Promise(() => {}));
       const { errors } = useChzzk({});
 
       emitRemoteAuthState({ status: "LOGIN_REQUIRED" });
 
-      expect(errors.value.map((e) => e.id)).toEqual(["chzzk-login"]);
+      expect(fetchMock).toHaveBeenCalledWith("/api/chzzk/me", {
+        timeout: 5000,
+      });
+      expect(errors.value).toHaveLength(0);
+    });
+
+    it("shows the login error once local verification of a remote LOGIN_REQUIRED ultimately fails", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({ status: "ERROR", code: "x", error: "x" });
+      const { errors } = useChzzk({});
+
+      // `onRemoteState` is wired as `(state) => void handleRemoteAuthState(state)`
+      // (production code deliberately discards the promise, matching this
+      // file's other fire-and-forget callbacks), so `emitRemoteAuthState`'s
+      // return value can't be awaited here -- poll instead until the
+      // me -> refresh -> me verification chain finishes and applies its result.
+      emitRemoteAuthState({ status: "LOGIN_REQUIRED" });
+
+      await vi.waitFor(() => {
+        expect(errors.value.map((e) => e.id)).toEqual(["chzzk-login"]);
+      });
+      // Confirm the error came from an actual local verification, not just
+      // from applying the remote state at face value (which would produce
+      // the same end state without ever touching $fetch).
+      expect(fetchMock).toHaveBeenCalledWith("/api/chzzk/me", {
+        timeout: 5000,
+      });
+    });
+
+    it("shows no login error when local verification of a remote LOGIN_REQUIRED succeeds", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({
+        status: "OK",
+        channelId: "chan-1",
+        channelName: "name",
+      });
+      const { errors } = useChzzk({});
+      // Seed a login error the same way the real onAuthRequired path would,
+      // so a successful verification clearing it is an observable effect.
+      deps().onAuthRequired(true);
+      expect(errors.value).toHaveLength(1);
+
+      emitRemoteAuthState({ status: "LOGIN_REQUIRED" });
+
+      await vi.waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith("/api/chzzk/me", {
+          timeout: 5000,
+        });
+        expect(errors.value).toHaveLength(0);
+      });
+    });
+
+    it("does not publish anything while verifying a remote LOGIN_REQUIRED, whichever way verification resolves", async () => {
+      setUp({ chzzkChannelId: "chan-1" });
+      fetchMock.mockResolvedValue({ status: "ERROR", code: "x", error: "x" });
+      const { errors } = useChzzk({});
+
+      emitRemoteAuthState({ status: "LOGIN_REQUIRED" });
+
+      // Wait for the verification chain to fully settle (it ends by showing
+      // the login error, given the ERROR response stubbed above), then
+      // confirm the verification path never called authBroadcast.publish --
+      // only checkAuth (the poll and the channel-id watcher) may publish.
+      await vi.waitFor(() => {
+        expect(errors.value.map((e) => e.id)).toEqual(["chzzk-login"]);
+      });
+      // Same discriminator as above: prove verification actually ran, so
+      // "publish was never called" isn't trivially true because nothing
+      // happened at all.
+      expect(fetchMock).toHaveBeenCalledWith("/api/chzzk/me", {
+        timeout: 5000,
+      });
+      expect(authBroadcast().publish).not.toHaveBeenCalled();
     });
 
     it("checkAuth publishes the resolved AUTHENTICATED state", async () => {

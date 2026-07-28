@@ -530,59 +530,140 @@ function applyChzzkAuthState(state: ChzzkAuthState) {
   }
 }
 
+// A remote AUTHENTICATED push is applied immediately -- it's good news, and
+// a wrong one self-corrects on this tab's own next poll. A remote
+// LOGIN_REQUIRED push is NOT trusted as-is: `/api/chzzk/me` returning
+// not_logged_in in the *other* tab doesn't mean this tab's session is bad
+// (see resolveChzzkAuthState below for why), and trusting it blindly used to
+// let one tab's false LOGIN_REQUIRED flash "치지직 로그인이 필요합니다" on
+// every other open OBS Browser Source. So it's re-verified locally first.
+function onRemoteChzzkAuthState(state: ChzzkAuthState) {
+  if (state.status === "AUTHENTICATED") {
+    applyChzzkAuthState(state);
+    return;
+  }
+  void verifyChzzkAuthState();
+}
+
 // Cross-tab push: lets another tab's login/logout show up here immediately,
 // instead of waiting for this tab's own 60s poll below to catch up. See
 // `lib/chzzkAuthBroadcast.ts`.
 const chzzkAuthBroadcast = createChzzkAuthBroadcast({
   createChannel: (name) => new BroadcastChannel(name),
-  onRemoteState: applyChzzkAuthState,
+  onRemoteState: onRemoteChzzkAuthState,
 });
 
 // Only refresh the CHZZK token once, as a mount-time keep-alive -- NOT on
 // every poll tick. The refresh token is single-use (see the comment block at
 // the top of server/api/chzzk/auth/refresh.ts), so rotating it every 60s in
 // every open settings tab would invalidate it out from under itself.
+//
+// resolveChzzkAuthState below also flips this flag when a failed
+// /api/chzzk/me forces a recovery refresh, so a login that only needed
+// recovering doesn't *also* get a redundant proactive refresh from
+// checkChzzkAuth right afterwards. But the flag is deliberately never read
+// to gate that recovery refresh itself -- an actual /api/chzzk/me failure
+// must always attempt recovery, or a session still good for up to another 29
+// days (access token expires in 1 day, refresh token in 30) would be thrown
+// away for nothing. And it's only ever consulted/flipped by checkChzzkAuth's
+// own keep-alive step below, never by verifyChzzkAuthState -- a
+// remote-triggered verification has no business proactively refreshing a
+// token just because it happened to find the session healthy.
 let hasRefreshedChzzkToken = false;
 
-async function checkChzzkAuth() {
+async function fetchChzzkMe(): Promise<ChzzkAuthState | undefined> {
+  // A stalled request must not wedge the poll forever: useTimeoutPoll's loop
+  // is `await fn(); start();`, so the next tick only arms once this call
+  // settles, and $fetch has no default timeout.
+  const response = await $fetch<ChzzkMeResponse | ApiError>("/api/chzzk/me", {
+    timeout: 5000,
+  });
+  if (response.status === "OK") {
+    return {
+      status: "AUTHENTICATED",
+      channelId: response.channelId,
+      channelName: response.channelName,
+    };
+  }
+  return undefined;
+}
+
+// Resolves the current Chzzk auth state without touching component state or
+// publishing anything -- callers decide what to do with the result. Mirrors
+// `useChzzk.ts`'s `resolveAuthState`: try /api/chzzk/me; if that comes back
+// as an explicit non-OK envelope (not a thrown fetch -- see below), POST
+// /api/chzzk/auth/refresh once and retry /api/chzzk/me before concluding
+// LOGIN_REQUIRED. This recovers from the access-token cookie's 1-day maxAge
+// expiring while the 30-day refresh-token cookie is still good; without it,
+// a day after last use this page would wrongly declare LOGIN_REQUIRED even
+// though a refresh would have succeeded.
+//
+// Returns `undefined` only when the *first* /api/chzzk/me call throws
+// (network/timeout failure, not a definitive answer) -- callers must leave
+// existing state untouched in that case, same as before this function
+// existed.
+async function resolveChzzkAuthState(): Promise<ChzzkAuthState | undefined> {
+  let state: ChzzkAuthState | undefined;
   try {
-    // A stalled request must not wedge the poll forever: useTimeoutPoll's
-    // loop is `await fn(); start();`, so the next tick only arms once this
-    // call settles, and $fetch has no default timeout.
-    const response = await $fetch<ChzzkMeResponse | ApiError>("/api/chzzk/me", {
+    state = await fetchChzzkMe();
+  } catch (e) {
+    console.error("Failed to check Chzzk me:", e);
+    return undefined;
+  }
+
+  if (state) return state;
+
+  // An explicit ERROR envelope, not a thrown fetch -- attempt one recovery
+  // refresh before giving up. Deliberately not gated by
+  // hasRefreshedChzzkToken; see that flag's comment above for why.
+  hasRefreshedChzzkToken = true;
+  try {
+    await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
+      method: "POST",
       timeout: 5000,
     });
-    if (response.status === "OK") {
-      const state: ChzzkAuthState = {
-        status: "AUTHENTICATED",
-        channelId: response.channelId,
-        channelName: response.channelName,
-      };
-      applyChzzkAuthState(state);
-      chzzkAuthBroadcast.publish(state);
-
-      if (!hasRefreshedChzzkToken) {
-        hasRefreshedChzzkToken = true;
-        try {
-          await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
-            method: "POST",
-            timeout: 5000,
-          });
-        } catch (e) {
-          console.error("Failed to refresh Chzzk token:", e);
-        }
-      }
-    } else {
-      // An explicit ERROR envelope from our own server: the user genuinely
-      // has no valid session.
-      applyChzzkAuthState({ status: "LOGIN_REQUIRED" });
-      chzzkAuthBroadcast.publish({ status: "LOGIN_REQUIRED" });
-    }
+    state = await fetchChzzkMe();
   } catch (e) {
-    // A thrown $fetch is a network/timeout failure, not a definitive answer
-    // -- leave the existing state alone rather than flipping to logged-out.
-    console.error("Failed to check Chzzk me:", e);
+    console.error("Failed to refresh Chzzk token:", e);
   }
+
+  return state ?? { status: "LOGIN_REQUIRED" };
+}
+
+// This tab's own periodic check: resolves the auth state, applies it
+// locally, and -- unlike verifyChzzkAuthState below -- publishes it so other
+// tabs pick up the change without waiting for their own poll. Only this
+// entry point performs the mount-time keep-alive refresh, and only once
+// overall (see hasRefreshedChzzkToken's comment).
+async function checkChzzkAuth() {
+  const state = await resolveChzzkAuthState();
+  if (!state) return;
+  applyChzzkAuthState(state);
+  chzzkAuthBroadcast.publish(state);
+
+  if (state.status === "AUTHENTICATED" && !hasRefreshedChzzkToken) {
+    hasRefreshedChzzkToken = true;
+    try {
+      await $fetch<ApiOk | ApiError>("/api/chzzk/auth/refresh", {
+        method: "POST",
+        timeout: 5000,
+      });
+    } catch (e) {
+      console.error("Failed to refresh Chzzk token:", e);
+    }
+  }
+}
+
+// Verifies a remote LOGIN_REQUIRED push before trusting it (see
+// onRemoteChzzkAuthState above). Deliberately does NOT publish: if it did, a
+// single genuine logout would make every tab publish, which would make every
+// other tab verify again in turn -- O(N^2) verifications/refreshes across N
+// open tabs. Only this tab's own poll (checkChzzkAuth) is allowed to
+// publish.
+async function verifyChzzkAuthState() {
+  const state = await resolveChzzkAuthState();
+  if (!state) return;
+  applyChzzkAuthState(state);
 }
 
 useTimeoutPoll(checkChzzkAuth, 60_000, { immediate: true });
