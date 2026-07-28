@@ -175,6 +175,29 @@ function urlValueDoesNotContain(url: URL, needle: string): boolean {
   return !url.toString().includes(needle);
 }
 
+test.describe("builder: favicon links (issue #7 brand mark)", () => {
+  test("the head declares the ico/svg/apple-touch-icon favicon set", async ({
+    page,
+  }) => {
+    await openReadyBuilderPage(page);
+
+    // Pins nuxt.config.ts's app.head.link block -- if a future config
+    // refactor drops or renames one of these, this fails instead of the
+    // regression only showing up as a missing tab icon nobody notices.
+    await expect(
+      page.locator('link[rel="icon"][href="/favicon.ico"]'),
+    ).toHaveAttribute("sizes", "32x32");
+    await expect(
+      page.locator('link[rel="icon"][href="/favicon.svg"]'),
+    ).toHaveAttribute("type", "image/svg+xml");
+    await expect(
+      page.locator(
+        'link[rel="apple-touch-icon"][href="/apple-touch-icon.png"]',
+      ),
+    ).toHaveCount(1);
+  });
+});
+
 test.describe("builder: regex fields are url-safe-base64 encoded", () => {
   test("hiddenUsernameRegex and hiddenMessageRegex round-trip through decodeUrlSafeBase64", async ({
     page,

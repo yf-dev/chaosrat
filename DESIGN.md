@@ -21,6 +21,14 @@ colors:
   overlay-canvas: "transparent"
   outline: "#000000"
   alarm: "rgba(251, 255, 0, 0.5)"
+  # Surface C — the brand mark (favicon, issue #7: a red rat nibbling a
+  # wedge of cheese). Lives in app/public/favicon.svg, generated into
+  # favicon.ico / apple-touch-icon.png by app/scripts/generate-favicons.mjs.
+  brand-rat: "#E23C2E"
+  brand-rat-blush: "#F58F86"
+  brand-cheese: "#FFC93C"
+  brand-cheese-cut: "#FFE08A"
+  brand-cheese-hole: "#E0A020"
 typography:
   builder-body:
     fontFamily: "'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, Roboto, 'Helvetica Neue', 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR', 'Malgun Gothic', 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', sans-serif"
@@ -109,6 +117,9 @@ components:
     textColor: "{colors.text}"
     rounded: "{rounded.lg}"
     padding: "{spacing.lg}"
+  brand-mark:
+    backgroundColor: "{colors.brand-rat}"
+    size: "32px"
 ---
 
 ## Overview
@@ -215,6 +226,35 @@ palette, `video-master`'s canvas/text pair, `cute`'s deliberately
 low-contrast nickname strip — are documented in each theme's own file, not
 here; see the theme map below.
 
+**Brand mark colors** (`app/public/favicon.svg`, issue #7). The reference
+object is a die-cut vinyl sticker: flat fills, no gradients, one uniform hard
+black keyline. That is not an arbitrary style pick — it is the overlay
+contract's own legibility rule (Overlay Contract & Theme Map #5, below)
+applied to a mark instead of to text. A favicon has exactly the overlay's
+problem: it renders against a background nobody controls — light and dark
+browser tab strips, OS docks, bookmark bars — so it borrows the overlay's
+solution, {colors.outline}, the
+same hard black `TextWithShadow` draws behind every glyph. {colors.outline}
+is therefore doing double duty now: the 8-way text shadow in the overlay,
+and the mark's keyline plus its eyes and nose. One ink, not two — that is
+why the mark has no separate near-black token of its own.
+
+What it depicts, and why: issue #7 asked for a red rat and cheese.
+{colors.brand-rat} is the rat, {colors.brand-rat-blush} the inner ear,
+{colors.brand-cheese} the wedge's cut face, {colors.brand-cheese-cut} the
+lighter top facet — the only thing making it read as a _wedge_ rather than a
+yellow bar — and {colors.brand-cheese-hole} the holes.
+
+**Twemoji was considered and declined.** The sibling project PEKORA (same
+owner, same `*.update.sh` domain) built its favicon straight from a single
+unmodified Twemoji glyph, and issue #7's own comment proposed the same. It
+was dropped because Twemoji's rat (`1f400`) is grey-blue `#66757F`: "red rat"
+would have meant recoloring it, which is a derivative work that still
+carries the CC-BY attribution obligation while no longer even looking like
+Twemoji. An original mark costs the same effort and owes nothing — there is
+no `about.txt` or CC-BY notice in this repo's `public/` because none is
+owed. Record this so it is not re-litigated.
+
 ## Typography
 
 Both surfaces share the same base unit: chota's `html { font-size: 62.5% }`
@@ -311,6 +351,29 @@ overlay's error banner just enough to read as a system toast rather than a
 hard alert box — this is the one radius the overlay contract itself
 specifies; every other corner treatment on the overlay (square, softened,
 or otherwise) is a per-theme decision recorded in that theme's own file.
+
+**The brand mark's geometry — 16px is the design constraint, not an
+afterthought.** `{components.brand-mark}` renders as small as a 16x16
+favicon tab icon, and every proportion below was chosen for what survives
+that downscale, recorded here as decisions with reasons rather than as
+adjectives:
+
+- **Only two objects** — the rat and the cheese. A third element (a third
+  color, a prop, a background shape) turns to mush at 16px; two flat-filled
+  silhouettes is the most this size can carry and still read.
+- **Oversized, wide-set ears.** Ear size relative to skull is the rodent cue
+  that survives downsampling best — a small or close-set pair collapses into
+  the head outline entirely at 16px, where finer cues (whiskers, fur
+  texture) are already gone.
+- **A long, tapering snout.** Without it the mark reads as a _bear_, not a
+  rat — that was observed by rendering a rounder-snouted candidate at 16px,
+  not theorized in advance.
+- **The head painted before the cheese, so the snout is occluded by the
+  wedge.** An earlier candidate had the two silhouettes merely touching
+  edge-to-edge; at that point the meeting of the two keylines reads as a
+  spike the head is balanced on, not as a bite. Overlapping the cheese on
+  top fixes that at the shape level (see the comment header in
+  `favicon.svg` for the paint-order requirement itself).
 
 ## Components
 
@@ -474,6 +537,20 @@ other token in that file.
   invent a use for either just to silence the linter — they are real,
   currently-unpainted values inherited from chota, and a fabricated binding
   would be less honest than the warning.
+- **Do** leave {colors.brand-rat-blush}, {colors.brand-cheese},
+  {colors.brand-cheese-cut}, and {colors.brand-cheese-hole} declared and
+  unbound, and accept the resulting `orphaned-tokens` warnings on all four
+  (only {colors.brand-rat} binds to `brand-mark`). **Don't** try to silence
+  them by inventing more components — a mark's palette is one indivisible
+  artwork, not five independently stylable surfaces, and the `components`
+  schema has exactly one slot per component. `brand-mark` deliberately has
+  no `textColor` either: pairing one with `backgroundColor` would trigger a
+  `contrast-ratio` finding on what is a logotype, and WCAG explicitly exempts
+  logotypes from contrast minimums.
+- **Do** treat `app/public/favicon.svg` as the only hand-edited copy of the
+  brand mark. **Don't** hand-edit `app/public/favicon.ico` or
+  `app/public/apple-touch-icon.png` — both are build products, regenerated
+  from the SVG by `npm run favicons` (`app/scripts/generate-favicons.mjs`).
 - **Do** keep {colors.overlay-canvas} transparent by default for any new
   theme. **Don't** default to an opaque canvas the way `video-master` does
   without a specific, documented reason — that theme is the deliberate

@@ -1,0 +1,35 @@
+<!--
+  Single source of truth for the ChaosRat brand mark (issue #7: a red rat
+  nibbling a wedge of cheese). `app/public/favicon.ico` and
+  `app/public/apple-touch-icon.png` are generated FROM this file by
+  `app/scripts/generate-favicons.mjs` (`npm run favicons`) -- edit this SVG
+  and re-run that script; never hand-edit the raster outputs.
+
+  Structural note: the head+ears group is painted BEFORE the cheese group on
+  purpose -- the snout tucks behind the wedge, which is what makes the
+  contact read as "nibbling" instead of the head balanced on a spike.
+  Reordering the two groups breaks the mark. See the root DESIGN.md's
+  Colors/Shapes sections for the full reasoning behind every color and
+  proportion below.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <g stroke="#000000" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+    <circle cx="7.6" cy="7.4" r="5.4" fill="#E23C2E" />
+    <circle cx="22.4" cy="7.4" r="5.4" fill="#E23C2E" />
+    <path
+      d="M15 3.4 C19.9 3.4 23.2 6.6 23.2 10.5 C23.2 13.8 21.4 16.2 19.2 17.6 C18.2 19.4 17.6 21.6 17.2 24 L12.8 24 C12.4 21.6 11.8 19.4 10.8 17.6 C8.6 16.2 6.8 13.8 6.8 10.5 C6.8 6.6 10.1 3.4 15 3.4 Z"
+      fill="#E23C2E"
+    />
+  </g>
+  <circle cx="7.6" cy="7.4" r="2.2" fill="#F58F86" />
+  <circle cx="22.4" cy="7.4" r="2.2" fill="#F58F86" />
+  <circle cx="11.7" cy="11.2" r="1.7" fill="#000000" />
+  <circle cx="18.3" cy="11.2" r="1.7" fill="#000000" />
+  <circle cx="15" cy="19.8" r="1.6" fill="#000000" />
+  <g stroke="#000000" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M2.5 30.5 L2.5 26.1 L29.5 23.1 L29.5 30.5 Z" fill="#FFC93C" />
+    <path d="M2.5 26.1 L8.5 22.4 L29.5 19.4 L29.5 23.1 Z" fill="#FFE08A" />
+  </g>
+  <circle cx="24.5" cy="27.8" r="1.3" fill="#E0A020" />
+  <circle cx="7" cy="28.9" r="1.1" fill="#E0A020" />
+</svg>
