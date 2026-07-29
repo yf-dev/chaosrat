@@ -1,6 +1,8 @@
 import {
   createChzzkAuthBroadcast,
   CHZZK_AUTH_CHANNEL_NAME,
+  selectAuthChannelFactory,
+  createNoopAuthChannel,
   type AuthBroadcastChannel,
   type ChzzkAuthBroadcastDeps,
   type ChzzkAuthState,
@@ -153,5 +155,37 @@ describe("createChzzkAuthBroadcast", () => {
     const broadcast = createChzzkAuthBroadcast(h.deps);
 
     expect(() => broadcast.publish(AUTH_A)).not.toThrow();
+  });
+});
+
+describe("selectAuthChannelFactory / createNoopAuthChannel", () => {
+  it("opens a real channel on the client path", () => {
+    const real: AuthBroadcastChannel = {
+      postMessage: vi.fn(),
+      close: vi.fn(),
+      onmessage: null,
+    };
+    const openReal = vi.fn((_name: string) => real);
+
+    const channel = selectAuthChannelFactory(true, openReal)("some-channel");
+
+    expect(openReal).toHaveBeenCalledWith("some-channel");
+    expect(channel).toBe(real);
+  });
+
+  it("returns a no-op channel on the server path without opening a real one", () => {
+    const openReal = vi.fn();
+
+    const channel = selectAuthChannelFactory(false, openReal)("some-channel");
+
+    expect(openReal).not.toHaveBeenCalled();
+    expect(channel.onmessage).toBeNull();
+    // The no-op must satisfy the interface and do nothing when driven.
+    expect(() => channel.postMessage(LOGIN_REQUIRED)).not.toThrow();
+    expect(() => channel.close()).not.toThrow();
+  });
+
+  it("createNoopAuthChannel returns a fresh object each call", () => {
+    expect(createNoopAuthChannel()).not.toBe(createNoopAuthChannel());
   });
 });

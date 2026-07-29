@@ -71,17 +71,29 @@ const { capturedAuthBroadcastDeps, capturedAuthBroadcast } = vi.hoisted(() => ({
   capturedAuthBroadcast: { current: undefined as unknown },
 }));
 
-vi.mock("~/lib/chzzkAuthBroadcast", () => ({
-  createChzzkAuthBroadcast: vi.fn((deps: ChzzkAuthBroadcastDeps) => {
-    capturedAuthBroadcastDeps.current = deps;
-    const broadcast = {
-      publish: vi.fn(),
-      close: vi.fn(async () => {}),
-    };
-    capturedAuthBroadcast.current = broadcast;
-    return broadcast;
-  }),
-}));
+// `selectAuthChannelFactory`/`createNoopAuthChannel` are kept real via
+// `importOriginal` -- they're pure and side-effect-free (see
+// `lib/chzzkAuthBroadcast.ts`), and `pages/index.vue` calls
+// `selectAuthChannelFactory` at module-setup time to build the `createChannel`
+// it hands to `createChzzkAuthBroadcast`, so a wholesale mock without it would
+// throw before the page ever mounts. Only `createChzzkAuthBroadcast` itself is
+// replaced, same as before.
+vi.mock("~/lib/chzzkAuthBroadcast", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("~/lib/chzzkAuthBroadcast")>();
+  return {
+    ...actual,
+    createChzzkAuthBroadcast: vi.fn((deps: ChzzkAuthBroadcastDeps) => {
+      capturedAuthBroadcastDeps.current = deps;
+      const broadcast = {
+        publish: vi.fn(),
+        close: vi.fn(async () => {}),
+      };
+      capturedAuthBroadcast.current = broadcast;
+      return broadcast;
+    }),
+  };
+});
 
 function authBroadcastDeps(): ChzzkAuthBroadcastDeps {
   return capturedAuthBroadcastDeps.current as ChzzkAuthBroadcastDeps;

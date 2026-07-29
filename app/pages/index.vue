@@ -353,6 +353,7 @@ import type {
 import { encodeUrlSafeBase64, parseIntOrDefault } from "~/lib/utils";
 import {
   createChzzkAuthBroadcast,
+  selectAuthChannelFactory,
   type ChzzkAuthState,
 } from "~/lib/chzzkAuthBroadcast";
 
@@ -547,9 +548,14 @@ function onRemoteChzzkAuthState(state: ChzzkAuthState) {
 
 // Cross-tab push: lets another tab's login/logout show up here immediately,
 // instead of waiting for this tab's own 60s poll below to catch up. See
-// `lib/chzzkAuthBroadcast.ts`.
+// `lib/chzzkAuthBroadcast.ts`. `selectAuthChannelFactory` opens a real channel
+// only in the browser; on the server it hands back a no-op, because
+// `broadcast-channel` leaks file descriptors under SSR (see that module).
 const chzzkAuthBroadcast = createChzzkAuthBroadcast({
-  createChannel: (name) => new BroadcastChannel(name),
+  createChannel: selectAuthChannelFactory(
+    import.meta.client,
+    (name) => new BroadcastChannel(name),
+  ),
   onRemoteState: onRemoteChzzkAuthState,
 });
 
@@ -666,7 +672,10 @@ async function verifyChzzkAuthState() {
   applyChzzkAuthState(state);
 }
 
-useTimeoutPoll(checkChzzkAuth, 60_000, { immediate: true });
+// Client-only: `checkChzzkAuth` polls `/api/chzzk/me`, which is meaningless
+// during SSR (the server has no browser cookies to check). `import.meta.client`
+// is statically false in the server build, so the poll never starts there.
+useTimeoutPoll(checkChzzkAuth, 60_000, { immediate: import.meta.client });
 
 onScopeDispose(() => {
   void chzzkAuthBroadcast.close();

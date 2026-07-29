@@ -76,3 +76,30 @@ export function createChzzkAuthBroadcast(deps: ChzzkAuthBroadcastDeps) {
 
   return { publish, close };
 }
+
+// Server-safe channel selection. `broadcast-channel` is a browser-only
+// primitive: on the server it has no native BroadcastChannel and silently
+// falls back to a filesystem transport (`/tmp/pubkey.bc/...`) that opens files
+// and a polling loop per instance, leaking file descriptors on every SSR
+// render until the process hits EMFILE. `createChzzkAuthBroadcast` opens its
+// channel eagerly, so its call sites must never hand it a real channel factory
+// on the server. Keeping that decision here -- rather than inline in a Vue SFC,
+// where the compile-time `import.meta.client` flag can't be flipped by a test
+// -- lets both branches be unit-tested.
+export function createNoopAuthChannel(): AuthBroadcastChannel {
+  return {
+    postMessage() {},
+    close() {},
+    onmessage: null,
+  };
+}
+
+export function selectAuthChannelFactory(
+  // `import.meta.client` types as `boolean | undefined` in this Nuxt setup
+  // (falsy during SSR), so this accepts the wider type rather than forcing
+  // every call site to coerce it.
+  isClient: boolean | undefined,
+  openRealChannel: (name: string) => AuthBroadcastChannel,
+): (name: string) => AuthBroadcastChannel {
+  return (name) => (isClient ? openRealChannel(name) : createNoopAuthChannel());
+}
