@@ -367,7 +367,7 @@ translucent-overlay look this theme's opaque canvas exists to opt out of.
   group (see Layout). Badges render as a horizontally-scrolling row inside
   `.badge-box` when a chat item carries any.
 - **{components.sticker}** is any `.sticker`-classed element spliced into
-  the sanitized message HTML by `messageHtml()`; sized at
+  the escaped message HTML by `messageHtml()`; sized at
   {spacing.sticker}, the other half of the same restated contract.
 - **{components.nickname-cell}** / **{components.message-cell}** are the
   bold column value and its indented detail line, per the Overview's

@@ -104,10 +104,10 @@ describe("TextWithShadow", () => {
     expect(root.text()).not.toContain("from slot");
   });
 
-  it("does not sanitize the html prop: the string is inserted verbatim (sanitization is the caller's responsibility)", async () => {
-    // `onclick` is an attribute any real sanitizer (e.g. sanitize-html) strips.
-    // Its unmistakable, unsanitized presence here proves this component does
-    // no sanitization of its own -- it is NOT safe to feed untrusted input.
+  it("does not neutralise the html prop: the string is inserted verbatim (making it safe is the caller's responsibility)", async () => {
+    // `onclick` is an attribute HTML-escaping would have neutralised. Its
+    // unmistakable survival here proves this component does nothing to the
+    // string -- it is NOT safe to feed untrusted input.
     const wrapper = await mountSuspended(TextWithShadow, {
       props: { html: '<span onclick="doSomething()">click</span>' },
     });

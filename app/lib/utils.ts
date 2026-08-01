@@ -1,4 +1,3 @@
-import sanitizeHtml from "sanitize-html";
 import type { ChatItem, ChatPlatform } from "./interfaces";
 import {
   encodeURI as base64EncodeURI,
@@ -95,7 +94,8 @@ export function encodeFormatString(
 }
 
 /**
- * Escape a string for safe interpolation into a double-quoted HTML attribute.
+ * Escape a string for safe use as HTML text content and inside a
+ * double-quoted HTML attribute value.
  *
  * `&` must be escaped first, otherwise the `&` produced by escaping `"`, `<`
  * and `>` would itself get escaped again.
@@ -103,7 +103,7 @@ export function encodeFormatString(
  * @param str - The string to escape
  * @returns The escaped string
  */
-function escapeHtmlAttribute(str: string): string {
+function escapeHtml(str: string): string {
   return str
     .replaceAll("&", "&amp;")
     .replaceAll('"', "&quot;")
@@ -111,12 +111,29 @@ function escapeHtmlAttribute(str: string): string {
     .replaceAll(">", "&gt;");
 }
 
+/**
+ * Escape a string for safe use as a literal (non-metacharacter) fragment
+ * inside a `RegExp` pattern.
+ *
+ * Emoji/sticker codes are not guaranteed to be regex-safe text — Kick codes
+ * look like `[emote:123:name]` and Chzzk codes like `{:id:}`, both full of
+ * regex metacharacters that must match themselves and nothing else.
+ *
+ * @param str - The string to escape
+ * @returns The escaped string
+ * @example
+ * escapeRegExp("[emote:123:name]") // "\\[emote:123:name\\]"
+ */
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function emojiToTag(emojiUrl: string): string {
-  return `<img class="emoji" src="${escapeHtmlAttribute(emojiUrl)}" />`;
+  return `<img class="emoji" src="${escapeHtml(emojiUrl)}" />`;
 }
 
 function stickerToTag(stickerUrl: string): string {
-  return `<img class="sticker" src="${escapeHtmlAttribute(stickerUrl)}" />`;
+  return `<img class="sticker" src="${escapeHtml(stickerUrl)}" />`;
 }
 
 export function messageHtml(
@@ -125,29 +142,73 @@ export function messageHtml(
   stickerToTagFn: (stickerUrl: string) => string = stickerToTag,
 ): string {
   // console.log(chat);
-  let message = sanitizeHtml(chat.message);
+  const message = escapeHtml(chat.message);
 
-  // replace emojis
+  // Collect every code -> replacement tag up front, keyed by the
+  // HTML-escaped code (the message is HTML-escaped, so a key must be
+  // escaped the same way to match it -- the production path hands over `{N}`
+  // placeholder tokens from ChatOverlay's encodeFormatString, for which this
+  // escape is a no-op, but callers are free to pass raw codes and the theme
+  // tests do, so the function must not rely on that).
+  // Emoji codes are inserted first and stickers are only added if the code
+  // isn't already claimed, so a code present in both keeps the same
+  // emoji-wins precedence the old sequential (emoji loop, then sticker
+  // loop) order produced.
+  const replacements = new Map<string, string>();
   if (chat.extra.emojis) {
     for (const emoji in chat.extra.emojis) {
-      message = message.replaceAll(
-        emoji,
-        emojiToTagFn(chat.extra.emojis[emoji]),
-      );
+      const key = escapeHtml(emoji);
+      if (key === "") continue;
+      replacements.set(key, emojiToTagFn(chat.extra.emojis[emoji]));
     }
   }
-
-  // replace stickers
   if (chat.extra.stickers) {
     for (const sticker in chat.extra.stickers) {
-      message = message.replaceAll(
-        sticker,
-        stickerToTagFn(chat.extra.stickers[sticker]),
-      );
+      const key = escapeHtml(sticker);
+      if (key === "" || replacements.has(key)) continue;
+      replacements.set(key, stickerToTagFn(chat.extra.stickers[sticker]));
     }
   }
 
-  return message;
+  if (replacements.size === 0) {
+    return message;
+  }
+
+  // A single combined regex, matched in one pass, is what makes this function
+  // correct on its own terms. The previous code ran one `replaceAll` per
+  // emoji/sticker in sequence, and each later `replaceAll` re-scanned text
+  // that earlier iterations had already injected. A code that happened to be
+  // a substring of an already-injected `<img class="emoji" src="..." />` tag
+  // (e.g. "img", "src", "class", or even the quote character) would split
+  // that tag apart mid-attribute. As the code stands, this can't actually
+  // happen in production: ChatOverlay.vue's processedChatItems normalises
+  // every emoji/sticker code to a `{N}` placeholder before messageHtml ever
+  // runs, and a `{N}` token cannot be a substring of an injected tag, so this
+  // was hardening a latent defect rather than closing a live one. But nothing
+  // enforces that upstream normalisation from inside this function, so it
+  // stays correct without depending on it. Matching every code against the
+  // *original* escaped message in one `replace()` call means an injected tag
+  // is never handed back to the regex engine to be re-matched. Codes are
+  // sorted longest-first so a longer code (e.g. ":wave:extra:") wins over a
+  // shorter code it happens to start with (":wave:"), and each code is
+  // escaped for safe use inside the pattern since codes may contain regex
+  // metacharacters (Kick codes like "[emote:123:name]", Chzzk codes like
+  // "{:id:}"). The replacement is a callback rather than a string, so a
+  // "$&"/"$1"-style sequence inside an emote URL is inserted literally
+  // instead of being interpreted by String.prototype.replace as a
+  // replacement pattern.
+  const pattern = new RegExp(
+    Array.from(replacements.keys())
+      .sort((a, b) => b.length - a.length)
+      .map(escapeRegExp)
+      .join("|"),
+    "g",
+  );
+
+  // Every alternative in `pattern` came from a key already in `replacements`,
+  // so a match can never fail the lookup; the non-null assertion just avoids
+  // an untestable defensive branch for a case that cannot occur.
+  return message.replace(pattern, (code) => replacements.get(code)!);
 }
 
 export function hashCode(str: string): number {

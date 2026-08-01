@@ -56,9 +56,9 @@ beforeEach(() => {
 // spirit even though markup/classes differ. Rather than writing near-
 // identical deep tests per theme, mount each with the same small set of
 // fixtures and assert only the things that would actually break: text
-// renders, sanitized HTML lands as real DOM (not escaped text -- this is
-// exactly what a `v-html`/`:html` regression would break), and badges/icon
-// show up when supplied.
+// renders, substituted emoji/sticker `<img>` tags land as real DOM (not
+// escaped text -- this is exactly what a `v-html`/`:html` regression would
+// break), and badges/icon show up when supplied.
 const themes: {
   name: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- table entries hold differently-typed components

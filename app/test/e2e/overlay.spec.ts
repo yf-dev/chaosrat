@@ -12,7 +12,7 @@ import type { ChatTheme } from "../../lib/interfaces";
 // Drives real messages through the mocked Twitch IRC transport into the
 // real pipeline: useTwitch -> useChatItems -> ChatOverlay -> theme
 // component. Covers rendering, filtering, capping, moderation, the
-// sanitize-html/XSS boundary and the seven-theme switch.
+// HTML-escaping/XSS boundary and the seven-theme switch.
 
 test.describe("overlay: rendering and ordering", () => {
   test("messages render one .item each, with nickname and message text, in timestamp order", async ({
@@ -252,7 +252,7 @@ test.describe("overlay: stickers", () => {
   });
 });
 
-test.describe("overlay: sanitize-html / DOM-XSS boundary", () => {
+test.describe("overlay: HTML-escaping / DOM-XSS boundary", () => {
   test("markup in a chat message is rendered as inert text -- no element created, nothing executes", async ({
     page,
   }) => {
@@ -276,8 +276,9 @@ test.describe("overlay: sanitize-html / DOM-XSS boundary", () => {
     await expect(page.locator(".item")).toHaveCount(1);
     await expect(page.getByText(marker, { exact: false })).toBeVisible();
 
-    // sanitize-html's default config allows neither <img> nor <script>, so
-    // neither element -- nor anything they'd execute -- should exist.
+    // messageHtml() HTML-escapes chat.message, so the <img>/<script> markup
+    // survives only as inert text -- neither element, nor anything they'd
+    // execute, should exist.
     await expect(page.locator(".item img[src='x']")).toHaveCount(0);
     await expect(page.locator(".item script")).toHaveCount(0);
 
@@ -291,12 +292,12 @@ test.describe("overlay: sanitize-html / DOM-XSS boundary", () => {
     page,
   }) => {
     // The defect fixed in 9b8ee0e: messageHtml() interpolated
-    // emoji/sticker URLs into `src="..."` *after* sanitize-html had
+    // emoji/sticker URLs into `src="..."` *after* the sanitizer of the day had
     // already run over chat.message, so the sanitizer never saw the URL
     // content at all. A sticker path containing a `"` broke out of the
     // attribute and injected an arbitrary attribute (e.g. onerror) on the
     // resulting <img>. lib/utils.ts's stickerToTag now runs the URL
-    // through escapeHtmlAttribute() first.
+    // through escapeHtml() first.
     //
     // network.ts's shared stub always serves a fixed, safe sticker path,
     // so this test installs its own network stub (not modifying the

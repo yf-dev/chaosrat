@@ -59,7 +59,7 @@
               {{ chat.nickname }}
             </div>
           </div>
-          <!-- eslint-disable-next-line vue/no-v-html -- messageHtml() runs the message through sanitize-html (lib/utils.ts) before emoji/sticker tags are spliced in -->
+          <!-- eslint-disable-next-line vue/no-v-html -- messageHtml() HTML-escapes the message (lib/utils.ts) before emoji/sticker tags are spliced in -->
           <div class="message" v-html="messageHtml(chat)" />
         </div>
       </div>
