@@ -237,6 +237,50 @@ describe("sticker/emoji encoding", () => {
     expect(wrapper.find("img.sticker").exists()).toBe(false);
     expect(wrapper.text()).toContain("plain message, nothing special");
   });
+
+  it("a message with backslashes and braces renders with the literal characters, not the format-string escapes ChatOverlay applied internally", async () => {
+    // ChatOverlay's processedChatItems runs every message through
+    // encodeFormatString (to keep a user-typed "{0}" from colliding with the
+    // "{0}"/"{1}"/... placeholder tokens real emoji/sticker codes get
+    // rewritten to). This is the component-level guard: it fails if that
+    // escaping ever leaks to the screen, regardless of which internal
+    // function stopped undoing it.
+    setChatOptions({ theme: "default" });
+    setUpChatItems([
+      makeChatItem({ id: "e3", message: "\\o/ use {0} C:\\Users\\me" }),
+    ]);
+
+    const wrapper = await mountSuspended(ChatOverlay);
+
+    expect(wrapper.text()).toContain("\\o/ use {0} C:\\Users\\me");
+  });
+
+  it("resolves a sticker id from the raw, pre-encode message even when the message also contains braces/backslashes", async () => {
+    // handleStickers scans chat.message for "~<id>" *before* encodeFormatString
+    // runs over it, so this pins that a brace/backslash elsewhere in the same
+    // message can't shift or hide the sticker match (e.g. by being mistaken
+    // for part of the tilde token, or by the raw scan seeing already-escaped
+    // text it wasn't meant to see).
+    setChatOptions({ theme: "default" });
+    vi.mocked(useOpenDcconSelector).mockReturnValue({
+      stickerItems: computed(() => [
+        { id: "cat", url: "https://example.com/cat.png" },
+      ]),
+    });
+    setUpChatItems([
+      makeChatItem({
+        id: "e4",
+        message: "~cat use {0} C:\\Users\\me",
+      }),
+    ]);
+
+    const wrapper = await mountSuspended(ChatOverlay);
+
+    const stickerImg = wrapper.find("img.sticker");
+    expect(stickerImg.exists()).toBe(true);
+    expect(stickerImg.attributes("src")).toBe("https://example.com/cat.png");
+    expect(wrapper.text()).toContain("use {0} C:\\Users\\me");
+  });
 });
 
 describe("errors", () => {

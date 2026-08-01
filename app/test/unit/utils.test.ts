@@ -44,10 +44,8 @@ describe("escapeFormatString", () => {
   it.each([
     ["hi", "hi"],
     ["{hi}", "\\{hi\\}"],
-    // NOTE: the JSDoc @example on escapeFormatString claims this input
-    // produces "\\\\{hi\\\\}" (2 backslashes per brace); the real
-    // implementation actually produces 3 (verified by running the code).
-    // The doc comment is stale — this asserts the real behaviour.
+    // NOTE: this input produces 3 backslashes per brace, not 2 (verified by
+    // running the code) — matches the JSDoc @example on escapeFormatString.
     ["\\{hi\\}", "\\\\\\{hi\\\\\\}"],
     ["", ""],
     ["\\", "\\\\"],
@@ -493,6 +491,204 @@ describe("messageHtml — security boundary", () => {
     expect(html).toBe(
       '<img class="emoji" src="https://cdn.example/emoji-wins.png" />',
     );
+  });
+});
+
+describe("messageHtml — format-string unescaping", () => {
+  // ChatOverlay.vue's processedChatItems runs every message through
+  // encodeFormatString before messageHtml ever sees it (so that a user-typed
+  // "{0}" cannot collide with the "{0}"/"{1}"/... placeholder tokens real
+  // emoji/sticker codes get rewritten to). messageHtml is the only place on
+  // the render path positioned to undo that: it has to keep the placeholder
+  // tokens alive until substitution runs, so it cannot unescape before
+  // substituting, and nothing downstream of messageHtml gets another chance.
+  // These tests run the real encodeFormatString -> messageHtml pipeline
+  // (mirroring ChatOverlay's own call shape) rather than hand-writing an
+  // already-escaped message, so a regression in either function's contract
+  // shows up here.
+  // `stickers` defaults to {} because most cases below only care about
+  // emojis; the real platforms' sticker path (dccon `~id` codes) reuses the
+  // same encodeFormatString call with its keys folded into the same target
+  // list (see ChatOverlay.vue's processedChatItems), so it is exercised here
+  // rather than through a second helper.
+  function encodeAndRender(
+    message: string,
+    emojis: { [code: string]: string } = {},
+    stickers: { [code: string]: string } = {},
+  ): string {
+    const encodeTargets = { ...emojis, ...stickers };
+    const { message: encodedMessage, targets } = encodeFormatString(
+      message,
+      Object.keys(encodeTargets),
+    );
+    const encodedEmojis: { [code: string]: string } = {};
+    for (const code of Object.keys(emojis)) {
+      encodedEmojis[targets[code]] = emojis[code];
+    }
+    const encodedStickers: { [code: string]: string } = {};
+    for (const code of Object.keys(stickers)) {
+      encodedStickers[targets[code]] = stickers[code];
+    }
+    const chat = makeChatItem({
+      message: encodedMessage,
+      extra: { emojis: encodedEmojis, stickers: encodedStickers },
+    });
+    return messageHtml(chat);
+  }
+
+  it("round-trips a literal backslash sequence typed by the user (no emoji present)", () => {
+    expect(encodeAndRender("\\o/ nice")).toBe("\\o/ nice");
+  });
+
+  it("round-trips a literal Windows path typed by the user (no emoji present)", () => {
+    expect(encodeAndRender("C:\\Users\\me")).toBe("C:\\Users\\me");
+  });
+
+  it('does not let a user-typed "{0}" collide with the real emoji it is disguised as', () => {
+    // The whole reason encodeFormatString escapes braces: without it, the
+    // literal text "{0}" typed by a user would be indistinguishable from the
+    // placeholder token a real emoji's code gets rewritten to, and would be
+    // replaced by that emoji's <img> tag instead of surviving as text.
+    const html = encodeAndRender("use {0} :wave:", {
+      ":wave:": "https://cdn.example/wave.png",
+    });
+    const div = parseHtml(html);
+    expect(div.textContent).toBe("use {0} ");
+    const img = div.querySelector("img.emoji");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe("https://cdn.example/wave.png");
+  });
+
+  it("unescapes literal braces/backslashes around a real emoji, and the emoji still substitutes", () => {
+    const html = encodeAndRender("C:\\Users\\me {fake} :wave: end", {
+      ":wave:": "https://cdn.example/wave.png",
+    });
+    const div = parseHtml(html);
+    expect(div.textContent).toBe("C:\\Users\\me {fake}  end");
+    const img = div.querySelector("img.emoji");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe("https://cdn.example/wave.png");
+  });
+
+  it("emits an emote URL containing a backslash and a brace byte-for-byte, never running it through the format-string unescape", () => {
+    // This is the regression guard for the wrong fix: unescaping the
+    // *finished* HTML (instead of only the literal text segments) would also
+    // rewrite characters inside an already-inserted, verbatim-URL tag. A
+    // custom emojiToTagFn (unlike the default emojiToTag) does no escaping of
+    // its own, so this also pins that messageHtml itself never touches the
+    // value it hands to it.
+    const chat = makeChatItem({
+      message: "hi :wave: \\{escaped\\} bye",
+      extra: {
+        emojis: { ":wave:": "https://cdn.example/wave\\{1}.png" },
+      },
+    });
+    const emojiToTagFn = (url: string) => `<img data-x="${url}">`;
+    const html = messageHtml(chat, emojiToTagFn);
+    expect(html).toBe(
+      'hi <img data-x="https://cdn.example/wave\\{1}.png"> {escaped} bye',
+    );
+  });
+
+  it("unescapes the message on the replacements.size === 0 early-return path", () => {
+    // Simulates what an already-escaped format string (as produced by
+    // encodeFormatString/escapeFormatString) looks like by the time it
+    // reaches messageHtml, for a chat item carrying no emoji/sticker extras
+    // at all -- the early-return branch.
+    const chat = makeChatItem({ message: "a \\{b\\} c\\\\d" });
+    expect(messageHtml(chat)).toBe("a {b} c\\d");
+  });
+
+  // Every case above uses ":wave:" as the emoji code, which contains none of
+  // the characters escapeFormatString touches. Real platform codes are not
+  // that clean -- CHZZK sends "{:id:}", YouTube sends "{:_id:}" -- so
+  // encodeFormatString's own escapeFormatString(original) call (needed
+  // because the *target itself* has to be matched literally, unescaped,
+  // inside the already-escaped message) runs on a target that collides with
+  // the very characters it's escaping. The cases below exercise that branch
+  // with codes taken directly from the real platforms, rather than only the
+  // synthetic ":wave:" used above.
+
+  it("substitutes a brace-containing (CHZZK-style) emoji code with nothing else leaking", () => {
+    const html = encodeAndRender("{:d_01:} hi", {
+      "{:d_01:}": "https://cdn.example/d01.png",
+    });
+    const div = parseHtml(html);
+    expect(div.textContent).toBe(" hi");
+    expect(div.querySelector("img.emoji")?.getAttribute("src")).toBe(
+      "https://cdn.example/d01.png",
+    );
+  });
+
+  it('does not let a user-typed "{0}" collide when the real code is itself brace-containing', () => {
+    // The synthetic ":wave:" version of this test above never touches
+    // encodeFormatString's target-escaping branch, since ":wave:" has no
+    // braces to escape. A CHZZK-style code does, so this is the case that
+    // actually proves the two escape passes (the message's, and the
+    // target's) don't step on each other.
+    const html = encodeAndRender("use {0} {:d_01:} C:\\Users\\me", {
+      "{:d_01:}": "https://cdn.example/d01.png",
+    });
+    const div = parseHtml(html);
+    expect(div.textContent).toBe("use {0}  C:\\Users\\me");
+    expect(div.querySelector("img.emoji")?.getAttribute("src")).toBe(
+      "https://cdn.example/d01.png",
+    );
+  });
+
+  it("renders a brace-containing code literally when it is absent from extra.emojis", () => {
+    // Nothing in extra.emojis names this code, so encodeFormatString never
+    // creates a placeholder target for it -- it goes through
+    // escapeFormatString as ordinary text and must come back out exactly as
+    // typed, braces included.
+    const html = encodeAndRender("look {:d_01:} here");
+    const div = parseHtml(html);
+    expect(div.textContent).toBe("look {:d_01:} here");
+    expect(div.querySelector("img")).toBeNull();
+  });
+
+  it("a user-typed backslash sitting immediately before a brace-containing code still lets the code substitute", () => {
+    // Segment-boundary stress: the escape run (one backslash, unescaped by
+    // the matchAll loop's per-segment unescapeFormatString call) ends at
+    // exactly the character where the placeholder token begins, so this pins
+    // that the split doesn't clip either side.
+    const html = encodeAndRender("\\{:d_01:}", {
+      "{:d_01:}": "https://cdn.example/d01.png",
+    });
+    const div = parseHtml(html);
+    expect(div.textContent).toBe("\\");
+    expect(div.querySelector("img.emoji")?.getAttribute("src")).toBe(
+      "https://cdn.example/d01.png",
+    );
+  });
+
+  it("resolves a Kick-style bracketed code and a dccon-style tilde sticker in the same message as braces/backslashes", () => {
+    const html = encodeAndRender(
+      "hey [emote:123:PogU] use {0} C:\\x ~cat bye",
+      { "[emote:123:PogU]": "https://cdn.example/pogu.png" },
+      { "~cat": "https://cdn.example/cat.png" },
+    );
+    const div = parseHtml(html);
+    expect(div.textContent).toBe("hey  use {0} C:\\x  bye");
+    expect(div.querySelector("img.emoji")?.getAttribute("src")).toBe(
+      "https://cdn.example/pogu.png",
+    );
+    expect(div.querySelector("img.sticker")?.getAttribute("src")).toBe(
+      "https://cdn.example/cat.png",
+    );
+  });
+
+  it("substitutes two different codes in one message, one brace-containing, with escaped text surviving between them", () => {
+    const html = encodeAndRender("{:d_01:} use {1} between :wave: C:\\end", {
+      "{:d_01:}": "https://cdn.example/d01.png",
+      ":wave:": "https://cdn.example/wave.png",
+    });
+    const div = parseHtml(html);
+    expect(div.textContent).toBe(" use {1} between  C:\\end");
+    const imgs = div.querySelectorAll("img.emoji");
+    expect(imgs.length).toBe(2);
+    expect(imgs[0].getAttribute("src")).toBe("https://cdn.example/d01.png");
+    expect(imgs[1].getAttribute("src")).toBe("https://cdn.example/wave.png");
   });
 });
 

@@ -7,14 +7,18 @@ import {
 /**
  * Escape curly braces and backslashes
  *
- * `{` -> `\\{`, `}` -> `\\}`, `\\` -> `\\\\`
+ * Replaces, in order: `\` (backslash) with `\\`, then `{` with `\{`, then `}`
+ * with `\}`. That line is written in actual characters. The `@example`
+ * values below, by contrast, are JavaScript string literals, so every
+ * backslash there is doubled to appear in source: one actual backslash is
+ * written `"\\"`, two actual backslashes `"\\\\"`, and so on.
  *
  * @param str - The string to escape
  * @returns The escaped string
  * @example
  * escapeFormatString("hi") // "hi"
  * escapeFormatString("{hi}") // "\\{hi\\}"
- * escapeFormatString("\\{hi\\}") // "\\\\{hi\\\\}"
+ * escapeFormatString("\\{hi\\}") // "\\\\\\{hi\\\\\\}"
  */
 export function escapeFormatString(str: string): string {
   return str.replace(/\\/g, "\\\\").replace(/{/g, "\\{").replace(/}/g, "\\}");
@@ -23,7 +27,10 @@ export function escapeFormatString(str: string): string {
 /**
  * Unescape curly braces and backslashes
  *
- * `\\{` -> `{`, `\\}` -> `}`, `\\\\` -> `\\`
+ * Replaces, in order: `\{` with `{`, then `\}` with `}`, then `\\` with `\`.
+ * As above, that line is written in actual characters, while the
+ * `@example` values below are JavaScript string literals (backslashes
+ * doubled to appear in source).
  *
  * @param str - The string to unescape
  * @returns The unescaped string
@@ -142,6 +149,16 @@ export function messageHtml(
   stickerToTagFn: (stickerUrl: string) => string = stickerToTag,
 ): string {
   // console.log(chat);
+  // `chat.message` here is a *format string*: ChatOverlay.vue's
+  // processedChatItems has already run encodeFormatString over the raw
+  // message before this function ever sees it, so that a user-typed literal
+  // "{0}" cannot collide with the "{0}"/"{1}"/... placeholder tokens real
+  // emoji/sticker codes get rewritten to. Undoing that escape (via
+  // unescapeFormatString) is this function's job and can't happen anywhere
+  // else on the render path: the placeholder tokens have to survive intact
+  // until substitution runs below, so unescaping has to happen after
+  // substitution, not before it, and there is no later stage that gets
+  // another look at the text.
   const message = escapeHtml(chat.message);
 
   // Collect every code -> replacement tag up front, keyed by the
@@ -171,7 +188,7 @@ export function messageHtml(
   }
 
   if (replacements.size === 0) {
-    return message;
+    return unescapeFormatString(message);
   }
 
   // A single combined regex, matched in one pass, is what makes this function
@@ -208,7 +225,26 @@ export function messageHtml(
   // Every alternative in `pattern` came from a key already in `replacements`,
   // so a match can never fail the lookup; the non-null assertion just avoids
   // an untestable defensive branch for a case that cannot occur.
-  return message.replace(pattern, (code) => replacements.get(code)!);
+  //
+  // The unescape has to run on the literal text *segments* between matches,
+  // not on the finished HTML string, because a replacement tag is an emote
+  // URL inserted verbatim (see the URL-integrity tests above, e.g. the "$&"
+  // one) -- unescaping the finished string would also rewrite a `\` or `{`
+  // that happens to sit inside that URL. `String.prototype.replace` gives no
+  // hook for transforming the text between matches (only the matches
+  // themselves), so a `matchAll` loop is used instead. This preserves the
+  // single-pass property from above -- `pattern` still runs against the
+  // *original* escaped `message`, so an injected tag is never re-scanned --
+  // while unescaping each in-between segment on its way into the output.
+  let html = "";
+  let lastIndex = 0;
+  for (const match of message.matchAll(pattern)) {
+    html += unescapeFormatString(message.slice(lastIndex, match.index));
+    html += replacements.get(match[0])!;
+    lastIndex = match.index + match[0].length;
+  }
+  html += unescapeFormatString(message.slice(lastIndex));
+  return html;
 }
 
 export function hashCode(str: string): number {
