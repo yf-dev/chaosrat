@@ -120,7 +120,7 @@
     "npm update reaches them without an override."
   ],
   "overrides": {
-    "brace-expansion": "^5.0.8",
+    "brace-expansion": "^5.0.12",
     "socket.io-parser": "~3.3.6",
     "engine.io-client": {
       "ws": "^7.5.10",
