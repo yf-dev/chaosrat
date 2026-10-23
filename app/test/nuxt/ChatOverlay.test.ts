@@ -15,6 +15,7 @@ import type {
   ChatPlatformError,
 } from "~/lib/interfaces";
 import type { ChatItemsOptions } from "~/composables/useChatItems";
+import { evaluateChatFilter, type ChatFilterRequest } from "~/lib/chatFilter";
 
 // ChatOverlay.vue pulls in three auto-imported composables/store that each
 // have their own dedicated test coverage elsewhere (or -- for useChatItems --
@@ -87,11 +88,47 @@ const allThemeComponents = [
   CuteChatLeftList,
   CuteChatRightList,
 ];
+let terminateWorker: () => void;
 
 beforeEach(() => {
   setChatOptions();
   setUpChatItems([]);
+  terminateWorker = vi.fn();
+  vi.stubGlobal(
+    "Worker",
+    class {
+      onmessage: ((event: MessageEvent) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onmessageerror: (() => void) | null = null;
+      constructor() {
+        queueMicrotask(() =>
+          this.onmessage?.({ data: { type: "ready" } } as MessageEvent),
+        );
+      }
+      postMessage(request: ChatFilterRequest) {
+        queueMicrotask(() =>
+          this.onmessage?.({
+            data: {
+              type: "result",
+              id: request.id,
+              visible: evaluateChatFilter(
+                request.usernamePattern,
+                request.messagePattern,
+                request.nickname,
+                request.message,
+              ),
+            },
+          } as MessageEvent),
+        );
+      }
+      terminate() {
+        terminateWorker();
+      }
+    },
+  );
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 describe("theme selection", () => {
   it.each([
@@ -126,37 +163,49 @@ describe("theme selection", () => {
 });
 
 describe("chat item filtering (hiddenUsernameRegex / hiddenMessageRegex)", () => {
+  it("terminates the filter worker when the overlay unmounts", async () => {
+    setChatOptions({ hiddenUsernameRegex: "^blocked$" });
+    const wrapper = await mountSuspended(ChatOverlay);
+    capturedChatItemsOptions!.filterItems!([makeChatItem()]);
+    expect(terminateWorker).not.toHaveBeenCalled();
+    wrapper.unmount();
+    expect(terminateWorker).toHaveBeenCalledOnce();
+  });
+
   it("filters out a chat item whose nickname matches hiddenUsernameRegex", async () => {
     setChatOptions({ hiddenUsernameRegex: "^spam_" });
 
     await mountSuspended(ChatOverlay);
-    const filter = capturedChatItemsOptions!.filter!;
-
-    expect(filter(makeChatItem({ nickname: "spam_bot" }))).toBe(false);
-    expect(filter(makeChatItem({ nickname: "regular_user" }))).toBe(true);
+    const filter = capturedChatItemsOptions!.filterItems!;
+    const items = [
+      makeChatItem({ nickname: "spam_bot" }),
+      makeChatItem({ nickname: "regular_user" }),
+    ];
+    expect(filter(items)).toEqual([]);
+    await vi.waitFor(() => expect(filter(items)).toEqual([items[1]]));
   });
 
   it("filters out a chat item whose message matches hiddenMessageRegex", async () => {
     setChatOptions({ hiddenMessageRegex: "bad.?word" });
 
     await mountSuspended(ChatOverlay);
-    const filter = capturedChatItemsOptions!.filter!;
-
-    expect(filter(makeChatItem({ message: "this has a badword in it" }))).toBe(
-      false,
-    );
-    expect(filter(makeChatItem({ message: "this is fine" }))).toBe(true);
+    const filter = capturedChatItemsOptions!.filterItems!;
+    const items = [
+      makeChatItem({ message: "this has a badword in it" }),
+      makeChatItem({ message: "this is fine" }),
+    ];
+    expect(filter(items)).toEqual([]);
+    await vi.waitFor(() => expect(filter(items)).toEqual([items[1]]));
   });
 
   it("with neither regex configured, nothing is filtered", async () => {
     setChatOptions({});
 
     await mountSuspended(ChatOverlay);
-    const filter = capturedChatItemsOptions!.filter!;
+    const filter = capturedChatItemsOptions!.filterItems!;
 
-    expect(
-      filter(makeChatItem({ nickname: "anyone", message: "anything" })),
-    ).toBe(true);
+    const item = makeChatItem({ nickname: "anyone", message: "anything" });
+    expect(filter([item])).toEqual([item]);
   });
 
   it("an invalid pattern (as neutralized by useChatOptionsStore, which never lets ChatOverlay see a broken one) results in no filtering, not a crash", async () => {
@@ -172,9 +221,10 @@ describe("chat item filtering (hiddenUsernameRegex / hiddenMessageRegex)", () =>
     });
 
     await expect(mountSuspended(ChatOverlay)).resolves.toBeDefined();
-    const filter = capturedChatItemsOptions!.filter!;
+    const filter = capturedChatItemsOptions!.filterItems!;
 
-    expect(filter(makeChatItem({ nickname: "[", message: "[" }))).toBe(true);
+    const item = makeChatItem({ nickname: "[", message: "[" });
+    expect(filter([item])).toEqual([item]);
   });
 });
 

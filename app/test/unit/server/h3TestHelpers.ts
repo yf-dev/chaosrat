@@ -10,6 +10,7 @@ import {
   defineEventHandler,
 } from "h3";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { Readable } from "node:stream";
 import { vi } from "vitest";
 import { createSingleFlight } from "~/server/utils/singleFlight";
 
@@ -67,6 +68,8 @@ export interface MockEventOptions {
    * picks it up without needing a real request stream.
    */
   body?: unknown;
+  /** Node request chunks for routes that read the request stream directly. */
+  streamBody?: Uint8Array[] | Readable;
 }
 
 /**
@@ -76,11 +79,21 @@ export interface MockEventOptions {
  * response header store (get/set/remove/append) plus statusCode.
  */
 export function createMockEvent(opts: MockEventOptions = {}) {
-  const req = {
-    method: opts.method ?? "GET",
-    url: opts.url ?? "/",
-    headers: { ...(opts.headers ?? {}) },
-  } as unknown as IncomingMessage;
+  const req = Object.assign(
+    opts.streamBody instanceof Readable
+      ? opts.streamBody
+      : Readable.from(opts.streamBody ?? []),
+    {
+      method: opts.method ?? "GET",
+      url: opts.url ?? "/",
+      // Browser fetch/XHR sends Origin on same-origin POST requests. Make that
+      // normal browser shape the default for state-changing route tests.
+      headers: {
+        ...(opts.method === "POST" ? { origin: "https://chaosrat.test" } : {}),
+        ...(opts.headers ?? {}),
+      },
+    },
+  ) as unknown as IncomingMessage;
 
   const resHeaders = new Map<string, string | string[]>();
   const res = {

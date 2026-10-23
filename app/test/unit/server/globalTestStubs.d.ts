@@ -8,15 +8,7 @@
 // concerned; without this declaration, any `globalThis.useRuntimeConfig`
 // read or write is a TS2339 error.
 //
-// This file lives next to `h3TestHelpers.ts` because it exists purely to
-// support that helper's stubbing pattern, and applies to every test file
-// under this directory (a `declare global` in any included file augments
-// the same global scope for the whole program) rather than needing to be
-// repeated per file.
-declare global {
-  // `var` (not `let`/`const`) is required here: only a top-level `var`
-  // inside `declare global` attaches to `globalThis`.
-  var useRuntimeConfig: typeof import("nitropack/runtime/internal/config").useRuntimeConfig;
-}
-
-export {};
+// This script-style declaration applies to all included unit tests.
+// `var` is required to expose this name on `globalThis` in a declaration file.
+// eslint-disable-next-line no-var
+declare var useRuntimeConfig: typeof import("nitropack/runtime/config").useRuntimeConfig;

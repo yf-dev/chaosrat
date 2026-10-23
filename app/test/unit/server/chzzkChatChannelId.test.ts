@@ -129,6 +129,7 @@ describe("server/api/chzzk/chatChannelId", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.chzzk.naver.com/polling/v2/channels/..%2F..%2F..%2Fopen%2Fv1%2Flives/live-status",
+      { timeout: 5000 },
     );
   });
 
@@ -152,6 +153,7 @@ describe("server/api/chzzk/chatChannelId", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.chzzk.naver.com/polling/v2/channels/abc/live-status",
+      { timeout: 5000 },
     );
   });
 

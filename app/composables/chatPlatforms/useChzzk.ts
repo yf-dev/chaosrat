@@ -348,6 +348,7 @@ export function useChzzk(options: {
               query: {
                 redirectTo: `${requestUrl.pathname}${requestUrl.search}`,
               },
+              timeout: 5000,
             },
           );
           if (response.status === "OK") {
@@ -379,6 +380,7 @@ export function useChzzk(options: {
         try {
           await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout", {
             method: "POST",
+            timeout: 5000,
           });
           // Best-effort: tell other tabs the login is gone before reloading,
           // so they don't sit on a stale logged-in state for up to a minute.

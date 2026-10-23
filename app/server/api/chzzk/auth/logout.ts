@@ -1,7 +1,10 @@
 import { setResponseStatus } from "h3";
 import type { ApiError, ApiOk } from "~/lib/interfaces";
+import { rejectCrossOriginPost } from "~/server/utils/rejectCrossOriginPost";
+import { markPrivateResponse } from "~/server/utils/markPrivateResponse";
 
 export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
+  markPrivateResponse(event);
   try {
     // CSRF hardening: this route is state-changing (revokes tokens, clears
     // cookies), and sameSite: "lax" cookies are still sent on a cross-site
@@ -15,6 +18,9 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
         error: "Method Not Allowed",
       };
     }
+
+    const originError = rejectCrossOriginPost(event);
+    if (originError) return originError;
 
     const config = useRuntimeConfig(event);
 
@@ -31,6 +37,7 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
         }>("/auth/v1/token/revoke", {
           baseURL: "https://chzzk.naver.com",
           method: "POST",
+          timeout: 5000,
           body: {
             token: accessToken,
             tokenTypeHint: "access_token",
@@ -53,6 +60,7 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
         }>("/auth/v1/token/revoke", {
           baseURL: "https://chzzk.naver.com",
           method: "POST",
+          timeout: 5000,
           body: {
             token: refreshToken,
             tokenTypeHint: "refresh_token",

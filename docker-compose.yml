@@ -2,10 +2,6 @@ services:
   app:
     build:
       context: .
-      args:
-        # NODE_ENV is the only build-time input the Dockerfile still declares
-        # an ARG for (see Dockerfile for why the rest were removed).
-        - NODE_ENV=dev
     # All NUXT_* values below are Nitro runtimeConfig and are resolved from
     # the environment at container start / per-request, never at build (see
     # the NOTE in Dockerfile). ${VAR} pulls each from the shell environment or

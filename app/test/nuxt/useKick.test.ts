@@ -46,6 +46,8 @@ const {
   };
 });
 
+mockNuxtImport("$fetch", () => fetchMock);
+
 vi.mock("@vueuse/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@vueuse/core")>();
   const { ref } = await import("vue");

@@ -1,4 +1,4 @@
-FROM node:24.18-alpine AS builder
+FROM node:26.12.1-alpine AS builder
 
 # NOTE: runtimeConfig values (NUXT_TWITCH_CLIENT_ID/SECRET,
 # NUXT_CHZZK_CLIENT_ID/SECRET, NUXT_PUBLIC_BASE_URL, NUXT_PUBLIC_GTAG_ID) are
@@ -11,21 +11,19 @@ FROM node:24.18-alpine AS builder
 # history` by anyone who has it) for no functional benefit. Supply all of
 # them as `environment:` at `docker run`/compose time instead -- see
 # docker-compose.yml. Do NOT reintroduce these as ARG/ENV.
-ARG NODE_ENV=production
-ENV NODE_ENV=${NODE_ENV}
+ENV NODE_ENV=production
 
 WORKDIR /home/node/app
 COPY app /home/node/app
 RUN npm ci --include=dev && npm run build
 
-FROM node:24.18-alpine
+FROM node:26.12.1-alpine
 
 COPY --from=builder /home/node/app/.output /home/node/app
 WORKDIR /home/node/app
 
 ENV NITRO_PORT 80
-ARG NODE_ENV=production
-ENV NODE_ENV=${NODE_ENV}
+ENV NODE_ENV=production
 
 # See the NOTE in the builder stage above: NUXT_TWITCH_CLIENT_ID/SECRET,
 # NUXT_CHZZK_CLIENT_ID/SECRET, NUXT_PUBLIC_BASE_URL and NUXT_PUBLIC_GTAG_ID

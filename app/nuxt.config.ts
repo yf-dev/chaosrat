@@ -1,5 +1,9 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  // Nuxt 4 defaults to an app/ subdirectory. This repository already uses
+  // its package root for pages, components, composables, and assets.
+  srcDir: ".",
+  dir: { app: "." },
   devtools: { enabled: false },
   modules: ["@pinia/nuxt", "nuxt-gtag", "@nuxt/eslint"],
 
@@ -47,7 +51,7 @@ export default defineNuxtConfig({
       allowedHosts: ["localhost", ".update.sh"],
     },
     define: {
-      global: "window", // Prevent `H3Error: global is not defined` error caused by old `socket.io-client`
+      global: "globalThis", // Supports old socket.io-client in the window and Vite's module workers.
     },
   },
 

@@ -23,6 +23,7 @@ export default defineEventHandler(
         // path; without encoding, dot segments (e.g. `../../../open/v1/lives`)
         // would be resolved by the URL parser and reach a different endpoint.
         `https://api.chzzk.naver.com/polling/v2/channels/${encodeURIComponent(channelId)}/live-status`,
+        { timeout: 5000 },
       );
       // This is an unofficial polling API. chatChannelId is `null` (not
       // omitted) while the channel is offline, so only the absence of

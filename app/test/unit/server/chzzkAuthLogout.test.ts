@@ -3,6 +3,31 @@ import { installH3Globals, createMockEvent } from "./h3TestHelpers";
 installH3Globals();
 
 describe("server/api/chzzk/auth/logout", () => {
+  it("rejects a sibling-origin form POST before revoking cookies", async () => {
+    const fetchMock = vi.fn();
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+    const handler = (await import("~/server/api/chzzk/auth/logout")).default;
+    const { event, getStatusCode, getResponseHeader } = createMockEvent({
+      url: "/api/chzzk/auth/logout",
+      method: "POST",
+      headers: {
+        origin: "https://attacker.chaosrat.test",
+        cookie: "chzzk_access_token=at-1; chzzk_refresh_token=rt-1",
+      },
+    });
+
+    const result = await handler(event);
+
+    expect(getStatusCode()).toBe(403);
+    expect(result).toEqual({
+      status: "ERROR",
+      code: "forbidden_origin",
+      error: "Forbidden Origin",
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getResponseHeader("set-cookie")).toBeUndefined();
+  });
+
   it("rejects a GET request with 405 and does not call upstream (CSRF hardening)", async () => {
     const fetchMock = vi.fn();
     globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
@@ -68,6 +93,9 @@ describe("server/api/chzzk/auth/logout", () => {
 
     expect(result).toEqual({ status: "OK" });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(options).toEqual(expect.objectContaining({ timeout: 5000 }));
+    }
     expect(fetchMock).toHaveBeenCalledWith(
       "/auth/v1/token/revoke",
       expect.objectContaining({
@@ -128,7 +156,7 @@ describe("server/api/chzzk/auth/logout", () => {
     ).toBe(true);
   });
 
-  it("returns internal_server_error when something inside the handler throws", async () => {
+  it("fails closed when the configured app origin cannot be read", async () => {
     const handler = (await import("~/server/api/chzzk/auth/logout")).default;
     const { event } = createMockEvent({
       url: "/api/chzzk/auth/logout",
@@ -142,11 +170,39 @@ describe("server/api/chzzk/auth/logout", () => {
 
     expect(result).toEqual({
       status: "ERROR",
-      code: "internal_server_error",
-      error: "Internal Server Error",
+      code: "forbidden_origin",
+      error: "Forbidden Origin",
     });
 
     // Restore, in case test order ever changes and a later test relies on it.
     installH3Globals();
+  });
+
+  it("returns an error without revoking tokens if cookie parsing fails", async () => {
+    const fetchMock = vi.fn();
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+    const handler = (await import("~/server/api/chzzk/auth/logout")).default;
+    const { event, getResponseHeader } = createMockEvent({
+      url: "/api/chzzk/auth/logout",
+      method: "POST",
+    });
+    Object.assign(globalThis, {
+      getCookie: vi.fn(() => {
+        throw new Error("cookie parser failed");
+      }),
+    });
+
+    try {
+      expect(await handler(event)).toEqual({
+        status: "ERROR",
+        code: "internal_server_error",
+        error: "Internal Server Error",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(getResponseHeader("set-cookie")).toBeUndefined();
+      expect(getResponseHeader("cache-control")).toBe("private, no-store");
+    } finally {
+      installH3Globals();
+    }
   });
 });

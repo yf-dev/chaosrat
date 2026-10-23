@@ -3,6 +3,7 @@ import type {
   ChzzkSessionInfo,
   ApiError,
 } from "~/lib/interfaces";
+import { markPrivateResponse } from "~/server/utils/markPrivateResponse";
 
 // This project's approved Chzzk Open API scopes do allow calling
 // GET /open/v1/sessions (세션 목록 조회(유저)): verified by hand in a browser
@@ -33,6 +34,7 @@ const sessionListFlight = createSingleFlight<ChzzkSessionInfo[]>({
 
 export default defineEventHandler(
   async (event): Promise<ChzzkSessionListResponse | ApiError> => {
+    markPrivateResponse(event);
     try {
       const accessToken = getCookie(event, "chzzk_access_token");
       if (!accessToken) {
@@ -52,6 +54,7 @@ export default defineEventHandler(
           };
         }>("https://openapi.chzzk.naver.com/open/v1/sessions", {
           headers: { Authorization: `Bearer ${accessToken}` },
+          timeout: 5000,
         });
 
         // Chzzk mirrors the HTTP status inside the response envelope, so a

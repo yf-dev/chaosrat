@@ -31,6 +31,13 @@ function fakeRoute(query: LocationQuery): RouteLocationNormalizedLoaded {
   return { query } as unknown as RouteLocationNormalizedLoaded;
 }
 
+function setTestLocation(location: Partial<Location> | Location) {
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: location,
+  });
+}
+
 mockNuxtImport("useRoute", () => {
   return vi.fn(() => fakeRoute({}));
 });
@@ -67,6 +74,8 @@ const {
     fakeBroadcastChannelCtor: vi.fn(),
   };
 });
+
+mockNuxtImport("$fetch", () => fetchMock);
 
 vi.mock("broadcast-channel", () => ({
   BroadcastChannel: fakeBroadcastChannelCtor,
@@ -948,16 +957,17 @@ describe("useChzzk", () => {
       deps().onAuthRequired(true);
 
       const originalLocation = window.location;
-      // jsdom's window.location is not directly assignable; delete + stub.
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { href: "" } as unknown as Location;
+      setTestLocation({ href: "" });
 
       await errors.value[0].onClick?.();
 
       expect(window.location.href).toBe("https://chzzk.naver.com/auth");
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/chzzk/auth/login",
+        expect.objectContaining({ timeout: 5000 }),
+      );
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
     });
 
     it("does not navigate and does not throw when the login-url fetch resolves with a non-OK status", async () => {
@@ -971,15 +981,13 @@ describe("useChzzk", () => {
       deps().onAuthRequired(true);
 
       const originalLocation = window.location;
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { href: "" } as unknown as Location;
+      setTestLocation({ href: "" });
 
       await expect(errors.value[0].onClick?.()).resolves.toBeUndefined();
 
       expect(window.location.href).toBe("");
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
     });
 
     it("does not navigate and does not throw when the login-url fetch rejects", async () => {
@@ -989,15 +997,13 @@ describe("useChzzk", () => {
       deps().onAuthRequired(true);
 
       const originalLocation = window.location;
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { href: "" } as unknown as Location;
+      setTestLocation({ href: "" });
 
       await expect(errors.value[0].onClick?.()).resolves.toBeUndefined();
 
       expect(window.location.href).toBe("");
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
     });
   });
 
@@ -1017,18 +1023,17 @@ describe("useChzzk", () => {
 
       const originalLocation = window.location;
       const reloadMock = vi.fn();
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { reload: reloadMock } as unknown as Location;
+      setTestLocation({ reload: reloadMock });
 
       await errors.value[0].onClick?.();
 
       expect(fetchMock).toHaveBeenLastCalledWith("/api/chzzk/auth/logout", {
         method: "POST",
+        timeout: 5000,
       });
       expect(reloadMock).toHaveBeenCalled();
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
     });
   });
 
@@ -1068,9 +1073,7 @@ describe("useChzzk", () => {
 
       const originalLocation = window.location;
       const reloadMock = vi.fn();
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { reload: reloadMock } as unknown as Location;
+      setTestLocation({ reload: reloadMock });
 
       await expect(errors.value[0].onClick?.()).resolves.toBeUndefined();
 
@@ -1079,7 +1082,7 @@ describe("useChzzk", () => {
       // silently clear it.
       expect(errors.value.map((e) => e.id)).toEqual(["chzzk-ccid-mismatch"]);
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
     });
   });
 
@@ -1351,9 +1354,7 @@ describe("useChzzk", () => {
       expect(errors.value.map((e) => e.id)).toEqual(["chzzk-ccid-mismatch"]);
 
       const originalLocation = window.location;
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { reload: vi.fn() } as unknown as Location;
+      setTestLocation({ reload: vi.fn() });
 
       await errors.value[0].onClick?.();
 
@@ -1361,7 +1362,7 @@ describe("useChzzk", () => {
         status: "LOGIN_REQUIRED",
       });
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
     });
 
     it("closes the auth broadcast when the owning effect scope is disposed", () => {

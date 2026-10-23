@@ -189,6 +189,13 @@ function fakeRoute(query: LocationQuery): RouteLocationNormalizedLoaded {
   return { query } as unknown as RouteLocationNormalizedLoaded;
 }
 
+function setTestLocation(location: Partial<Location> | Location) {
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    value: location,
+  });
+}
+
 mockNuxtImport("useRoute", () => {
   return vi.fn(() => fakeRoute({}));
 });
@@ -456,9 +463,7 @@ describe("pages/index.vue", () => {
       }));
 
       const originalLocation = window.location;
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { href: "" } as unknown as Location;
+      setTestLocation({ href: "" });
 
       await wrapper.find(".link").trigger("click");
       await flushPromises();
@@ -467,7 +472,7 @@ describe("pages/index.vue", () => {
         "https://chzzk.naver.com/account-interlock?state=abc",
       );
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
     });
 
     it("loginToChzzk: does not navigate when the login fetch resolves with a non-OK status", async () => {
@@ -482,16 +487,14 @@ describe("pages/index.vue", () => {
         .mockImplementation(() => {});
 
       const originalLocation = window.location;
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { href: "" } as unknown as Location;
+      setTestLocation({ href: "" });
 
       await wrapper.find(".link").trigger("click");
       await flushPromises();
 
       expect(window.location.href).toBe("");
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
       consoleError.mockRestore();
     });
 
@@ -505,9 +508,7 @@ describe("pages/index.vue", () => {
         .mockImplementation(() => {});
 
       const originalLocation = window.location;
-      // @ts-expect-error -- intentional test-only override
-      delete window.location;
-      window.location = { href: "" } as unknown as Location;
+      setTestLocation({ href: "" });
 
       await expect(
         wrapper.find(".link").trigger("click"),
@@ -516,7 +517,7 @@ describe("pages/index.vue", () => {
 
       expect(window.location.href).toBe("");
 
-      window.location = originalLocation;
+      setTestLocation(originalLocation);
       consoleError.mockRestore();
     });
 

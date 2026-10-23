@@ -1,4 +1,5 @@
 import { installH3Globals, createMockEvent } from "./h3TestHelpers";
+import { Readable } from "node:stream";
 
 installH3Globals();
 
@@ -95,6 +96,28 @@ describe("server/api/youtubeLive/proxy/[...path]", () => {
     expect(headerValue(init.headers, "origin")).toBe("https://www.youtube.com");
     expect(headerValue(init.headers, "referer")).toBe(
       "https://www.youtube.com",
+    );
+  });
+
+  it("keeps the upstream origin fixed when the request URL starts with //", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event } = createMockEvent({
+      method: "GET",
+      url: "//evil.example/api/youtubeLive/proxy/watch?v=test",
+    });
+    event.context.params = { path: "/watch" };
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response("<html></html>", { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    await handler(event);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      "https://www.youtube.com/watch?v=test",
     );
   });
 
@@ -437,7 +460,8 @@ describe("server/api/youtubeLive/proxy/[...path]", () => {
     const { event } = createMockEvent({
       method: "POST",
       url: "/api/youtubeLive/proxy/youtubei/v1/live_chat/get_live_chat?key=x",
-      body: rawBody,
+      headers: { "content-length": String(Buffer.byteLength(rawBody)) },
+      streamBody: [Buffer.from(rawBody)],
     });
     event.context.params = { path: "youtubei/v1/live_chat/get_live_chat" };
 
@@ -451,9 +475,9 @@ describe("server/api/youtubeLive/proxy/[...path]", () => {
 
     await handler(event);
 
-    const [, init] = fetchMock.mock.calls[0] as [string, { body: Buffer }];
-    expect(Buffer.isBuffer(init.body)).toBe(true);
-    expect(init.body.toString("utf8")).toBe(rawBody);
+    const [, init] = fetchMock.mock.calls[0] as [string, { body: Uint8Array }];
+    expect(init.body).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(init.body)).toBe(rawBody);
   });
 
   it("does not relay an upstream Set-Cookie header to the client on the POST branch", async () => {
@@ -524,6 +548,340 @@ describe("server/api/youtubeLive/proxy/[...path]", () => {
 
     expect(getResponseHeader("x-content-type-options")).toBe("nosniff");
   });
+
+  it("sandboxes upstream HTML when served from the app origin", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getResponseHeader } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=test",
+    });
+    event.context.params = { path: "/watch" };
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response("<html><script>alert(1)</script></html>", {
+        headers: { "content-type": "text/html" },
+      }),
+    ) as unknown as typeof globalThis.fetch;
+
+    await handler(event);
+
+    expect(getResponseHeader("content-security-policy")).toBe(
+      "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'",
+    );
+  });
+
+  it("rejects a chunked POST body above 1 MiB before fetching upstream", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "POST",
+      url: "/api/youtubeLive/proxy/youtubei/v1/live_chat/get_live_chat",
+      headers: { "transfer-encoding": "chunked" },
+      streamBody: [Buffer.alloc(1024 * 1024), Buffer.from("x")],
+    });
+    event.context.params = { path: "youtubei/v1/live_chat/get_live_chat" };
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Payload Too Large",
+    });
+    expect(getStatusCode()).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a declared oversized POST body before reading it", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "POST",
+      url: "/api/youtubeLive/proxy/youtubei/v1/live_chat/get_live_chat",
+      headers: { "content-length": String(1024 * 1024 + 1) },
+    });
+    event.context.params = { path: "youtubei/v1/live_chat/get_live_chat" };
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Payload Too Large",
+    });
+    expect(getStatusCode()).toBe(413);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("stops waiting when a chunked POST client stalls", async () => {
+    vi.useFakeTimers();
+    try {
+      const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+        .default;
+      const stalled = new Readable({ read() {} });
+      const { event, getStatusCode } = createMockEvent({
+        method: "POST",
+        url: "/api/youtubeLive/proxy/youtubei/v1/live_chat/get_live_chat",
+        headers: { "transfer-encoding": "chunked" },
+        streamBody: stalled,
+      });
+      event.context.params = { path: "youtubei/v1/live_chat/get_live_chat" };
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+      const resultPromise = handler(event);
+      await vi.advanceTimersByTimeAsync(15_000);
+
+      expect(await resultPromise).toMatchObject({
+        status: "ERROR",
+        error: "Request Timeout",
+      });
+      expect(getStatusCode()).toBe(408);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects an upstream live page above 8 MiB without returning its body", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=x",
+    });
+    event.context.params = { path: "/watch" };
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(new Uint8Array(8 * 1024 * 1024 + 1)),
+      ) as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Upstream response too large",
+    });
+    expect(getStatusCode()).toBe(502);
+  });
+
+  it("rejects a declared oversized upstream page before reading its body", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=x",
+    });
+    event.context.params = { path: "/watch" };
+    globalThis.fetch = vi.fn().mockResolvedValue(
+      new Response("small test body", {
+        headers: { "content-length": String(8 * 1024 * 1024 + 1) },
+      }),
+    ) as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Upstream response too large",
+    });
+    expect(getStatusCode()).toBe(502);
+  });
+
+  it("handles an upstream response without a body", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=x",
+    });
+    event.context.params = { path: "/watch" };
+    globalThis.fetch = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(null, { status: 204 }),
+      ) as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toBe("");
+  });
+
+  it("sets an upstream timeout and handles redirects explicitly", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=x",
+    });
+    event.context.params = { path: "/watch" };
+    const fetchMock = vi.fn().mockResolvedValue(new Response("ok"));
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    await handler(event);
+
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.redirect).toBe("manual");
+  });
+
+  it("returns 504 when the upstream deadline expires", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=x",
+    });
+    event.context.params = { path: "/watch" };
+    globalThis.fetch = vi
+      .fn()
+      .mockRejectedValue(
+        new DOMException("The operation timed out", "TimeoutError"),
+      ) as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Upstream Timeout",
+    });
+    expect(getStatusCode()).toBe(504);
+  });
+
+  it("follows a same-origin YouTube live-page redirect", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/@owner/live",
+    });
+    event.context.params = { path: "/@owner/live" };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { location: "/watch?v=LIVE123" },
+        }),
+      )
+      .mockResolvedValueOnce(new Response("<html></html>"));
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toBe("<html></html>");
+    expect(fetchMock.mock.calls.map(([target]) => target)).toEqual([
+      "https://www.youtube.com/@owner/live",
+      "https://www.youtube.com/watch?v=LIVE123",
+    ]);
+  });
+
+  it("rejects an upstream cross-origin redirect without fetching its target", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=x",
+    });
+    event.context.params = { path: "/watch" };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { location: "http://127.0.0.1:8000/private" },
+      }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Upstream redirect rejected",
+    });
+    expect(getStatusCode()).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a same-origin redirect outside the live-page paths", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=x",
+    });
+    event.context.params = { path: "/watch" };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { location: "/redirect?to=http://127.0.0.1" },
+      }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Upstream redirect rejected",
+    });
+    expect(getStatusCode()).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops following a same-origin redirect loop", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "GET",
+      url: "/api/youtubeLive/proxy/watch?v=x",
+    });
+    event.context.params = { path: "/watch" };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 302,
+        headers: { location: "/watch?v=x" },
+      }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Upstream redirect rejected",
+    });
+    expect(getStatusCode()).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(6);
+  });
+
+  it("does not forward a live-chat POST body through an upstream redirect", async () => {
+    const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+      .default;
+    const { event, getStatusCode } = createMockEvent({
+      method: "POST",
+      url: "/api/youtubeLive/proxy/youtubei/v1/live_chat/get_live_chat",
+    });
+    event.context.params = { path: "youtubei/v1/live_chat/get_live_chat" };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(null, {
+        status: 307,
+        headers: { location: "/watch?v=x" },
+      }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+    expect(await handler(event)).toMatchObject({
+      status: "ERROR",
+      error: "Upstream redirect rejected",
+    });
+    expect(getStatusCode()).toBe(502);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["DELETE", "PATCH", "OPTIONS"])(
+    "rejects %s at the chat endpoint before forwarding upstream",
+    async (method) => {
+      const handler = (await import("~/server/api/youtubeLive/proxy/[...path]"))
+        .default;
+      const { event, getStatusCode } = createMockEvent({
+        method,
+        url: "/api/youtubeLive/proxy/youtubei/v1/live_chat/get_live_chat",
+      });
+      event.context.params = { path: "youtubei/v1/live_chat/get_live_chat" };
+      const fetchMock = vi.fn();
+      globalThis.fetch = fetchMock as unknown as typeof globalThis.fetch;
+
+      expect(await handler(event)).toMatchObject({
+        status: "ERROR",
+        error: "Method Not Allowed",
+      });
+      expect(getStatusCode()).toBe(405);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
 
   describe("path allowlist", () => {
     it.each([

@@ -1,4 +1,5 @@
 import type { ApiError } from "~/lib/interfaces";
+import { markPrivateResponse } from "~/server/utils/markPrivateResponse";
 
 // This handler `return`s a redirect via h3's `sendRedirect()` (typed
 // `Promise<void>`) alongside `ApiError` objects on other paths. h3 itself
@@ -7,6 +8,7 @@ import type { ApiError } from "~/lib/interfaces";
 // it's a legitimate Nitro/h3 pattern, not a mistake.
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- see above
 export default defineEventHandler(async (event): Promise<void | ApiError> => {
+  markPrivateResponse(event);
   try {
     const query = getQuery(event);
     const config = useRuntimeConfig(event);
@@ -77,6 +79,16 @@ export default defineEventHandler(async (event): Promise<void | ApiError> => {
         error: "Invalid redirect URL",
       };
     }
+    // A same-origin absolute URL can still have a pathname starting with
+    // "//". Sending that pathname as Location makes the browser treat it as
+    // a protocol-relative URL to a different origin.
+    if (redirectTarget.pathname.startsWith("//")) {
+      return {
+        status: "ERROR",
+        code: "invalid_redirect",
+        error: "Invalid redirect URL",
+      };
+    }
     // Redirect to the re-serialised path, not the raw cookie value. This is
     // the load-bearing half of the fix: re-serialising through `URL` is what
     // guarantees no parser-stripped character (TAB/LF/CR) ever reaches the
@@ -99,6 +111,7 @@ export default defineEventHandler(async (event): Promise<void | ApiError> => {
       }>("/auth/v1/token", {
         baseURL: "https://chzzk.naver.com",
         method: "POST",
+        timeout: 5000,
         body: {
           grantType: "authorization_code",
           code: code,

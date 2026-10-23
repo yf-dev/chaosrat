@@ -20,7 +20,7 @@ ChaosRat은 [OBS Studio](https://obsproject.com/)와 같은 방송 소프트웨�
   - `!!clear`, `!!클리어` 명령어를 사용하여 채팅을 지울 수 있음
   - `!!set theme video-master` 등의 명령어로 설정을 실시간으로 변경할 수 있음
 - 개발자 친화적
-  - Nuxt3를 사용하여 프론트엔드와 백엔드를 동시에 개발
+  - Nuxt4를 사용하여 프론트엔드와 백엔드를 동시에 개발
   - 플랫폼, 스티커, 테마 등을 모듈화하여 쉽게 수정 및 추가
   - [도커(Docker)](https://www.docker.com/)를 사용해 빠르게 개발 환경을 구축 및 배포
 

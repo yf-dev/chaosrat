@@ -1,5 +1,7 @@
 import { setResponseStatus } from "h3";
 import type { ApiError, ApiOk } from "~/lib/interfaces";
+import { rejectCrossOriginPost } from "~/server/utils/rejectCrossOriginPost";
+import { markPrivateResponse } from "~/server/utils/markPrivateResponse";
 
 interface RefreshTokenResult {
   accessToken: string;
@@ -37,6 +39,7 @@ const refreshFlight = createSingleFlight<RefreshTokenResult>({
 });
 
 export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
+  markPrivateResponse(event);
   try {
     // CSRF hardening: this route is state-changing (rotates the single-use
     // refresh token), and sameSite: "lax" cookies are still sent on a
@@ -50,6 +53,9 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
         error: "Method Not Allowed",
       };
     }
+
+    const originError = rejectCrossOriginPost(event);
+    if (originError) return originError;
 
     const config = useRuntimeConfig(event);
 

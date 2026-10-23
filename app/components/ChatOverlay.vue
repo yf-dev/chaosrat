@@ -78,33 +78,7 @@ const soundEffectUrl = computed(() => {
   }
 });
 
-const hiddenUsernameRegex = computed(() => {
-  if (!chatOptions.value.hiddenUsernameRegex) {
-    return null;
-  }
-  return new RegExp(chatOptions.value.hiddenUsernameRegex);
-});
-
-const hiddenMessageRegex = computed(() => {
-  if (!chatOptions.value.hiddenMessageRegex) {
-    return null;
-  }
-  return new RegExp(chatOptions.value.hiddenMessageRegex);
-});
-
-function filterChatItems(chat: ChatItem): boolean {
-  if (hiddenUsernameRegex.value) {
-    if (hiddenUsernameRegex.value.test(chat.nickname)) {
-      return false;
-    }
-  }
-  if (hiddenMessageRegex.value) {
-    if (hiddenMessageRegex.value.test(chat.message)) {
-      return false;
-    }
-  }
-  return true;
-}
+const filterChatItems = useChatFilter(() => chatOptions.value);
 
 function playSoundEffect() {
   if (!soundEffectUrl.value) {
@@ -127,7 +101,7 @@ function playSoundEffect() {
 }
 
 const { chatItems, errors } = useChatItems({
-  filter: filterChatItems,
+  filterItems: filterChatItems,
   onNewChatItem: (_chat) => {
     playSoundEffect();
   },

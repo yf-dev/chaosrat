@@ -101,6 +101,14 @@ describe("server/api/chzzk/auth/callback", () => {
       "http://evil.example/",
       "absolute http URL (already rejected pre-fix, kept as coverage)",
     ],
+    [
+      "https://chaosrat.test//evil.example/phish",
+      "same-origin absolute URL with a protocol-relative path",
+    ],
+    [
+      "/.//evil.example/phish",
+      "dot-segment path that normalises to a protocol-relative path",
+    ],
   ])(
     "rejects an unsafe oauth_redirect cookie (%s, %s)",
     async (unsafeRedirect) => {

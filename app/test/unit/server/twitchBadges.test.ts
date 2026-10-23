@@ -78,6 +78,10 @@ describe("server/api/twitch/badges", () => {
         "founder/1": "https://img/founder-1",
       },
     });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    for (const [, options] of fetchMock.mock.calls) {
+      expect(options).toEqual(expect.objectContaining({ timeout: 5000 }));
+    }
   });
 
   it("skips the channel-badges lookup when no broadcaster is found for the given login", async () => {

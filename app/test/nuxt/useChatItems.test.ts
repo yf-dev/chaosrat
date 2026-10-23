@@ -5,7 +5,7 @@ import type { LocationQuery, RouteLocationNormalizedLoaded } from "vue-router";
 import type { ChatItem } from "~/lib/interfaces";
 
 // `useChatItems` concatenates the four platform composables' `chatItems`,
-// applies a caller-supplied `filter` predicate, sorts by `timestamp`, and
+// applies caller-supplied batch and item filters, sorts by `timestamp`, and
 // slices to `chatOptions.maxChatSize`. The four platform composables
 // (useChzzk/useTwitch/useYoutubeLive/useKick) each open real sockets/timers
 // and are mocked out entirely here; `useChatOptionsStore` is left real (with
@@ -151,15 +151,27 @@ describe("useChatItems", () => {
     expect(chatItems.value.map((c) => c.id)).toEqual(["keep"]);
   });
 
-  // ChatOverlay.vue (the only real caller) builds its filter as:
-  //   new RegExp(chatOptions.value.hiddenUsernameRegex).test(chat.nickname)
-  // with NO try/catch around the `new RegExp(...)` call. `useChatOptionsStore`'s
-  // hiddenUsernameRegex/hiddenMessageRegex computeds now validate the
-  // decoded source with `new RegExp(...)` themselves and return `undefined`
-  // when it's invalid, so a malformed regex arriving via the URL (e.g.
-  // `?hiddenUsernameRegex=<base64 of "[">`) no longer reaches this
-  // `new RegExp(...)` call in practice -- that specific crash-on-mount path
-  // is fixed at the store boundary.
+  it("passes every raw item to the batch filter before sorting and capping", () => {
+    setUpMaxChatSize("1");
+    const raw = [
+      makeChatItem("chzzk", "old", 1),
+      makeChatItem("twitch", "new", 3),
+      makeChatItem("kick", "middle", 2),
+    ];
+    setUpPlatforms({ chzzk: [raw[0]], twitch: [raw[1]], kick: [raw[2]] });
+    const filterItems = vi.fn((items: ChatItem[]) =>
+      items.filter((item) => item.id !== "new"),
+    );
+
+    const { chatItems } = useChatItems({ filterItems });
+
+    expect(filterItems).toHaveBeenCalledWith(raw);
+    expect(chatItems.value.map((item) => item.id)).toEqual(["middle"]);
+  });
+
+  // ChatOverlay now evaluates configured patterns in a Worker. This test
+  // preserves the generic filter callback's exception behavior for callers
+  // that supply their own predicate.
   //
   // What's still true, and what this test documents: `Array.prototype.filter`
   // does not catch exceptions from its predicate, and `useChatItems`'s

@@ -359,7 +359,7 @@ describe("server/api/chzzk/auth/refresh", () => {
     });
   });
 
-  it("returns internal_server_error when something inside the handler throws, outside the inner refresh try/catch", async () => {
+  it("fails closed when the configured app origin cannot be read", async () => {
     globalThis.$fetch = vi.fn() as unknown as typeof globalThis.$fetch;
 
     const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
@@ -376,8 +376,36 @@ describe("server/api/chzzk/auth/refresh", () => {
 
     expect(result).toEqual({
       status: "ERROR",
-      code: "internal_server_error",
-      error: "Internal Server Error",
+      code: "forbidden_origin",
+      error: "Forbidden Origin",
     });
+  });
+
+  it("returns an error without exchanging tokens if cookie parsing fails", async () => {
+    const fetchMock = vi.fn();
+    globalThis.$fetch = fetchMock as unknown as typeof globalThis.$fetch;
+    const handler = (await import("~/server/api/chzzk/auth/refresh")).default;
+    const { event, getResponseHeader } = createMockEvent({
+      url: "/api/chzzk/auth/refresh",
+      method: "POST",
+    });
+    Object.assign(globalThis, {
+      getCookie: vi.fn(() => {
+        throw new Error("cookie parser failed");
+      }),
+    });
+
+    try {
+      expect(await handler(event)).toEqual({
+        status: "ERROR",
+        code: "internal_server_error",
+        error: "Internal Server Error",
+      });
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(getResponseHeader("set-cookie")).toBeUndefined();
+      expect(getResponseHeader("cache-control")).toBe("private, no-store");
+    } finally {
+      installH3Globals();
+    }
   });
 });

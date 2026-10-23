@@ -482,6 +482,7 @@ async function loginToChzzk() {
       "/api/chzzk/auth/login",
       {
         query: { redirectTo: `${requestUrl.pathname}${requestUrl.search}` },
+        timeout: 5000,
       },
     );
     if (response.status === "OK") {
@@ -498,6 +499,7 @@ async function logoutFromChzzk() {
   try {
     const response = await $fetch<ApiOk | ApiError>("/api/chzzk/auth/logout", {
       method: "POST",
+      timeout: 5000,
     });
     if (response.status === "OK") {
       applyChzzkAuthState({ status: "LOGIN_REQUIRED" });

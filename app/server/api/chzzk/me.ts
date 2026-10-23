@@ -1,4 +1,5 @@
 import type { ChzzkMeResponse, ApiError } from "~/lib/interfaces";
+import { markPrivateResponse } from "~/server/utils/markPrivateResponse";
 
 interface ChzzkIdentity {
   channelId: string;
@@ -18,6 +19,7 @@ const meFlight = createSingleFlight<ChzzkIdentity>({
 
 export default defineEventHandler(
   async (event): Promise<ChzzkMeResponse | ApiError> => {
+    markPrivateResponse(event);
     try {
       const accessToken = getCookie(event, "chzzk_access_token");
       if (!accessToken) {

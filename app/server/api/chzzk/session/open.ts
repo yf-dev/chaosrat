@@ -1,8 +1,11 @@
 import { setResponseStatus } from "h3";
 import type { ChzzkSessionOpenResponse, ApiError } from "~/lib/interfaces";
+import { rejectCrossOriginPost } from "~/server/utils/rejectCrossOriginPost";
+import { markPrivateResponse } from "~/server/utils/markPrivateResponse";
 
 export default defineEventHandler(
   async (event): Promise<ChzzkSessionOpenResponse | ApiError> => {
+    markPrivateResponse(event);
     try {
       // CSRF hardening: this route is state-changing (consumes one of the
       // user's 3 concurrent CHZZK session slots), and sameSite: "lax"
@@ -16,6 +19,9 @@ export default defineEventHandler(
           error: "Method Not Allowed",
         };
       }
+
+      const originError = rejectCrossOriginPost(event);
+      if (originError) return originError;
 
       const accessToken = getCookie(event, "chzzk_access_token");
       if (!accessToken) {
@@ -34,6 +40,8 @@ export default defineEventHandler(
         };
       }>("https://openapi.chzzk.naver.com/open/v1/sessions/auth", {
         headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 5000,
+        retry: 0,
       });
 
       // Chzzk mirrors the HTTP status inside the response envelope, so a

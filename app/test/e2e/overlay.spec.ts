@@ -112,6 +112,45 @@ test.describe("overlay: regex filters", () => {
     await expect(page.getByText("HideByName")).toHaveCount(0);
     await expect(page.getByText("AlsoKeep")).toHaveCount(0);
   });
+
+  test("a backtracking regex cannot stall the overlay", async ({ page }) => {
+    const { irc } = await openOverlay(page, {
+      query: {
+        theme: "default",
+        hiddenMessageRegex: encodeUrlSafeBase64("^(a+)+$"),
+      },
+      irc: { channel: "regex_timeout_channel" },
+    });
+
+    const maliciousReceived = page.waitForEvent("console", {
+      predicate: (message) => message.text() === "Twitch message",
+    });
+    await irc.sendMessage({
+      id: "e2e-redos-1",
+      displayName: "Attacker",
+      message: `${"a".repeat(32)}!`,
+    });
+    await maliciousReceived;
+
+    // The Twitch handler logs before Vue evaluates the filter. A browser
+    // timer must still run promptly after that message reaches the page.
+    const probeStarted = Date.now();
+    await page.evaluate(
+      () => new Promise<void>((resolve) => setTimeout(resolve, 50)),
+    );
+    expect(Date.now() - probeStarted).toBeLessThan(1000);
+
+    await irc.sendMessage({
+      id: "e2e-redos-2",
+      displayName: "RegularUser",
+      message: "still responsive",
+    });
+
+    await expect(page.getByText("still responsive")).toBeVisible({
+      timeout: 10_000,
+    });
+    await expect(page.getByText(`${"a".repeat(32)}!`)).toHaveCount(0);
+  });
 });
 
 test.describe("overlay: invalid regex degrades to no filter instead of crashing", () => {

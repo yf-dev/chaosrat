@@ -44,6 +44,8 @@ const { mockClient, fetchMock } = vi.hoisted(() => {
   return { mockClient: client, fetchMock: vi.fn() };
 });
 
+mockNuxtImport("$fetch", () => fetchMock);
+
 vi.mock("tmi.js", () => ({
   // Must be a real function (not an arrow function) so `new Client(...)`
   // (used by useTwitch.ts's initChat) is a valid construct call.

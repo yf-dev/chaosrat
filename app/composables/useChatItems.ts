@@ -1,6 +1,8 @@
 import type { ChatItem } from "~/lib/interfaces";
 
 export interface ChatItemsOptions {
+  /** Filters the combined raw chat list before sorting and applying maxChatSize. */
+  filterItems?: (items: ChatItem[]) => ChatItem[];
   /**
    * Filter function to filter chat items
    * @param chatItem The chat item to be filtered
@@ -54,12 +56,13 @@ export function useChatItems(options: ChatItemsOptions) {
   });
 
   const chatItems = computed(() => {
-    return [
+    const items = [
       ...chzzkChatItems.value,
       ...twitchChatItems.value,
       ...youtubeLiveChatItems.value,
       ...kickChatItems.value,
-    ]
+    ];
+    return (options.filterItems ? options.filterItems(items) : items)
       .filter(options.filter ?? (() => true))
       .sort((a, b) => a.timestamp - b.timestamp)
       .slice(-(chatOptions.value.maxChatSize ?? 100));

@@ -1,8 +1,10 @@
 import crypto from "crypto";
 import type { ChzzkAuthLoginResponse, ApiError } from "~/lib/interfaces";
+import { markPrivateResponse } from "~/server/utils/markPrivateResponse";
 
 export default defineEventHandler(
   async (event): Promise<ChzzkAuthLoginResponse | ApiError> => {
+    markPrivateResponse(event);
     try {
       const config = useRuntimeConfig(event);
 

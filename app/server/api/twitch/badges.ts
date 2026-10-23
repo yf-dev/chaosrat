@@ -38,6 +38,7 @@ export default defineEventHandler(
         token_type: string;
       }>("https://id.twitch.tv/oauth2/token", {
         method: "POST",
+        timeout: 5000,
         body: new URLSearchParams({
           client_id: twitchClientId,
           client_secret: twitchClientSecret,
@@ -55,6 +56,7 @@ export default defineEventHandler(
           }[];
         }[];
       }>(`https://api.twitch.tv/helix/chat/badges/global`, {
+        timeout: 5000,
         headers: {
           "Client-ID": twitchClientId,
           Authorization: `Bearer ${appAccessToken.access_token}`,
@@ -75,6 +77,7 @@ export default defineEventHandler(
         }[];
       }>("https://api.twitch.tv/helix/users", {
         query: { login: channelId },
+        timeout: 5000,
         headers: {
           "Client-ID": twitchClientId,
           Authorization: `Bearer ${appAccessToken.access_token}`,
@@ -94,6 +97,7 @@ export default defineEventHandler(
         }>(
           `https://api.twitch.tv/helix/chat/badges?broadcaster_id=${broadcaster.data[0].id}`,
           {
+            timeout: 5000,
             headers: {
               "Client-ID": twitchClientId,
               Authorization: `Bearer ${appAccessToken.access_token}`,

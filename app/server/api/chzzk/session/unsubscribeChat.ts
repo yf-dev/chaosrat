@@ -1,7 +1,10 @@
 import { setResponseStatus } from "h3";
 import type { ApiOk, ApiError } from "~/lib/interfaces";
+import { rejectCrossOriginPost } from "~/server/utils/rejectCrossOriginPost";
+import { markPrivateResponse } from "~/server/utils/markPrivateResponse";
 
 export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
+  markPrivateResponse(event);
   try {
     // CSRF hardening: this route is state-changing (unsubscribes a CHZZK
     // session from chat events), and sameSite: "lax" cookies are still sent
@@ -15,6 +18,9 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
         error: "Method Not Allowed",
       };
     }
+
+    const originError = rejectCrossOriginPost(event);
+    if (originError) return originError;
 
     const accessToken = getCookie(event, "chzzk_access_token");
     if (!accessToken) {
@@ -56,6 +62,7 @@ export default defineEventHandler(async (event): Promise<ApiOk | ApiError> => {
         method: "POST",
         query: { sessionKey: body.sessionKey },
         headers: { Authorization: `Bearer ${accessToken}` },
+        timeout: 5000,
       },
     );
 
