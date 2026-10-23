@@ -3,7 +3,7 @@ import type { ChatFilterRequest, ChatFilterResponse } from "./chatFilter";
 const MAX_ENTRIES = 4096;
 const MAX_PENDING = 128;
 const STARTUP_TIMEOUT_MS = 5000;
-const EVALUATION_TIMEOUT_MS = 50;
+const EVALUATION_TIMEOUT_MS = 200;
 
 export interface ChatFilterWorker {
   onmessage: ((event: MessageEvent<ChatFilterResponse>) => void) | null;

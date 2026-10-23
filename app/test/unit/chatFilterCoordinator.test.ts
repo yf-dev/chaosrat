@@ -94,7 +94,10 @@ describe("chat filter coordinator", () => {
       coordinator.includes("a".repeat(100) + "!", "first");
       coordinator.includes("regular", "second");
       workers[0].send({ type: "ready" });
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(199);
+      expect(workers[0].terminate).not.toHaveBeenCalled();
+      expect(workers).toHaveLength(1);
+      vi.advanceTimersByTime(1);
       expect(workers[0].terminate).toHaveBeenCalledOnce();
       expect(workers).toHaveLength(2);
       expect(workers[0].emitError()).toHaveBeenCalledOnce();
@@ -104,6 +107,26 @@ describe("chat filter coordinator", () => {
       );
       workers[1].send({ type: "result", id: 2, visible: true });
       expect(coordinator.includes("regular", "second")).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("terminates a stuck evaluation without restarting when nothing is queued", () => {
+    vi.useFakeTimers();
+    try {
+      const { coordinator, workers, changed } = setup();
+      coordinator.setPatterns("^(a+)+$", "");
+      const stuck = "a".repeat(100) + "!";
+      expect(coordinator.includes("nick", stuck)).toBe(false);
+      workers[0].send({ type: "ready" });
+      expect(workers[0].postMessage).toHaveBeenCalledOnce();
+      vi.advanceTimersByTime(200);
+      expect(workers[0].terminate).toHaveBeenCalledOnce();
+      expect(workers).toHaveLength(1);
+      expect(coordinator.includes("nick", stuck)).toBe(false);
+      expect(coordinator.pendingCount).toBe(0);
+      expect(changed).toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
     }
