@@ -3,10 +3,15 @@ docker-compose.*.yml
 
 # devcontainer
 .devcontainer
+/scripts
 
 # claude
 .claude
 CLAUDE.local.md
+/AGENTS.md
+
+# codex
+.codex
 
 # local env files
 .env
